@@ -33,6 +33,7 @@ final class PartnerAppStore: ObservableObject {
     private let tokenKey = "firebase_id_token"
     private var refreshTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
+    private var notifiedPendingBookingIds = Set<String>()
 
     init() {
         loadLocalState()
@@ -67,6 +68,7 @@ final class PartnerAppStore: ObservableObject {
         if let data = defaults.data(forKey: bookingsKey),
            let saved = try? JSONDecoder().decode([PartnerBooking].self, from: data) {
             bookings = saved
+            notifiedPendingBookingIds = Set(saved.filter(\.isPending).map(\.id))
         }
         authToken = secureStore.string(for: tokenKey)
         fcmToken = defaults.string(forKey: "partner_fcm_token") ?? ""
@@ -197,6 +199,16 @@ final class PartnerAppStore: ObservableObject {
             if let index = notifications.firstIndex(where: { $0.id == item.id }) {
                 notifications[index].isRead = true
             }
+        }
+    }
+
+    func markAllNotificationsRead() {
+        Task {
+            await api.markAllNotificationsRead(token: authToken)
+            for index in notifications.indices {
+                notifications[index].isRead = true
+            }
+            infoMessage = "Messages marked as read."
         }
     }
 
@@ -387,7 +399,7 @@ final class PartnerAppStore: ObservableObject {
                 let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
                 guard size <= AppConfig.maxDocumentBytes else {
-                    errorMessage = "Document must be under 4 MB."
+                    errorMessage = "Document must be under 5 MB."
                     return
                 }
                 uploadingDocumentType = documentType
@@ -483,8 +495,26 @@ final class PartnerAppStore: ObservableObject {
     }
 
     private func mergeBookings(_ live: [PartnerBooking]) {
+        let existingIds = Set(bookings.map(\.id))
         for booking in live {
             upsertBooking(booking, persist: false)
+            if booking.isPending,
+               !existingIds.contains(booking.id),
+               !notifiedPendingBookingIds.contains(booking.id) {
+                notifiedPendingBookingIds.insert(booking.id)
+                notificationService.showBookingRequestNotification(booking)
+                notifications.insert(
+                    PartnerNotificationItem(
+                        id: "local-\(booking.id)",
+                        title: "New request available",
+                        body: "\(booking.serviceName) | \(booking.slot)",
+                        type: "booking_request",
+                        bookingId: booking.id,
+                        isRead: false
+                    ),
+                    at: 0
+                )
+            }
         }
         persistBookings()
         if let selected = selectedBooking,

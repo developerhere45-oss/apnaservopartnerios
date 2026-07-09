@@ -3,8 +3,10 @@ import UIKit
 
 enum AppTheme {
     static let bg = Color(hex: 0xFFF7F5)
+    static let bgLight = Color(hex: 0xFFF9F8)
     static let card = Color.white
     static let ink = Color(hex: 0x201C1C)
+    static let textBlue = Color(hex: 0x172333)
     static let muted = Color(hex: 0x696060)
     static let rose = Color(hex: 0xEF4D70)
     static let roseDark = Color(hex: 0x911243)
@@ -13,7 +15,9 @@ enum AppTheme {
     static let green = Color(hex: 0x2B9953)
     static let greenSoft = Color(hex: 0xE7F9ED)
     static let blue = Color(hex: 0x2D7ADA)
+    static let blueSoft = Color(hex: 0xEDEFFF)
     static let orange = Color(hex: 0xF19D23)
+    static let orangeSoft = Color(hex: 0xFFF4E2)
     static let purple = Color(hex: 0xA754DD)
 }
 
@@ -30,40 +34,97 @@ extension Color {
 }
 
 extension View {
-    func cardStyle(padding: CGFloat = 16) -> some View {
+    func androidCard(cornerRadius: CGFloat = 20, padding: CGFloat = 16) -> some View {
         self
             .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(AppTheme.line, lineWidth: 1)
+            )
+            .shadow(color: AppTheme.rose.opacity(0.07), radius: 10, x: 0, y: 5)
+    }
+
+    func cardStyle(padding: CGFloat = 16) -> some View {
+        androidCard(padding: padding)
     }
 
     func primaryButton() -> some View {
         self
-            .font(.headline.weight(.bold))
+            .font(.system(size: 16, weight: .bold))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(AppTheme.rose, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(
+                LinearGradient(colors: [AppTheme.rose, AppTheme.roseDark], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            )
+            .shadow(color: AppTheme.rose.opacity(0.22), radius: 8, x: 0, y: 5)
+    }
+
+    func greenButton() -> some View {
+        self
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(
+                LinearGradient(colors: [Color(hex: 0x0DB85B), Color(hex: 0x009A4B)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            )
     }
 
     func darkButton() -> some View {
         self
-            .font(.headline.weight(.bold))
+            .font(.system(size: 16, weight: .bold))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     func outlineButton() -> some View {
         self
-            .font(.subheadline.weight(.bold))
+            .font(.system(size: 14, weight: .bold))
             .foregroundStyle(AppTheme.ink)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppTheme.line, lineWidth: 1)
+            )
+    }
+
+    func safeText() -> some View {
+        fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct AndroidPage<Content: View>: View {
+    var showsTopPadding = true
+    let content: Content
+
+    init(showsTopPadding: Bool = true, @ViewBuilder content: () -> Content) {
+        self.showsTopPadding = showsTopPadding
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 14) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.horizontal, 18)
+            .padding(.top, showsTopPadding ? 12 : 0)
+            .padding(.bottom, 22)
+        }
+        .background(AppTheme.bg.ignoresSafeArea())
     }
 }
 
@@ -77,36 +138,115 @@ struct TopBar: View {
     var body: some View {
         HStack(spacing: 12) {
             if let backAction {
-                Button(action: backAction) {
-                    Image(systemName: "chevron.left")
-                        .font(.headline)
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white, in: Circle())
-                }
+                RoundIconButton(systemImage: "chevron.left", action: backAction)
+                    .frame(width: 46, height: 46)
+            } else {
+                Color.clear.frame(width: 46, height: 46)
             }
-            VStack(alignment: .leading, spacing: 2) {
+
+            VStack(spacing: 2) {
                 Text(title)
-                    .font(.headline.weight(.black))
+                    .font(.system(size: 20, weight: .black))
                     .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.system(size: 12))
                         .foregroundStyle(AppTheme.muted)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.82)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity)
+
             if let trailingSystemImage, let trailingAction {
-                Button(action: trailingAction) {
-                    Image(systemName: trailingSystemImage)
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(width: 38, height: 38)
-                        .background(Color.white, in: Circle())
-                }
+                RoundIconButton(systemImage: trailingSystemImage, action: trailingAction)
+                    .frame(width: 46, height: 46)
+            } else {
+                Color.clear.frame(width: 46, height: 46)
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(AppTheme.bg)
+    }
+}
+
+struct AndroidCenteredHeader: View {
+    let title: String
+    let subtitle: String
+    var leadingSystemImage = "line.3.horizontal"
+    var trailingSystemImage: String?
+    var badgeCount = 0
+    var leadingAction: (() -> Void)?
+    var trailingAction: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundIconButton(systemImage: leadingSystemImage) {
+                leadingAction?()
+            }
+            .frame(width: 48, height: 50)
+
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(AppTheme.textBlue)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .safeText()
+            }
+            .frame(maxWidth: .infinity)
+
+            if let trailingSystemImage {
+                ZStack(alignment: .topTrailing) {
+                    RoundIconButton(systemImage: trailingSystemImage) {
+                        trailingAction?()
+                    }
+                    .frame(width: 48, height: 50)
+                    if badgeCount > 0 {
+                        Text("\(min(badgeCount, 99))")
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(AppTheme.rose, in: Capsule())
+                            .offset(x: 3, y: -4)
+                    }
+                }
+            } else {
+                Color.clear.frame(width: 48, height: 50)
+            }
+        }
+    }
+}
+
+struct RoundIconButton: View {
+    let systemImage: String
+    var tint: Color = AppTheme.rose
+    var background: Color = Color.white
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(AppTheme.line, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -116,17 +256,77 @@ struct SectionHeader: View {
     var action: (() -> Void)?
 
     var body: some View {
-        HStack {
+        HStack(alignment: .center) {
             Text(title)
-                .font(.headline.weight(.black))
+                .font(.system(size: 17, weight: .black))
                 .foregroundStyle(AppTheme.ink)
+                .safeText()
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.caption.weight(.bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppTheme.rose)
             }
         }
+        .padding(.horizontal, 4)
+    }
+}
+
+struct StatusPill: View {
+    let text: String
+    var tint: Color = AppTheme.rose
+    var background: Color = AppTheme.roseSoft
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .black))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(background, in: Capsule())
+    }
+}
+
+struct ServiceBadge: View {
+    let title: String
+    var size: CGFloat = 58
+
+    var body: some View {
+        Text(short)
+            .font(.system(size: size > 50 ? 16 : 13, weight: .black))
+            .foregroundStyle(accent)
+            .frame(width: size, height: size)
+            .background(bg, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+    }
+
+    private var short: String {
+        let value = title.lowercased()
+        if value.contains("laundry") { return "LD" }
+        if value.contains("ro") { return "RO" }
+        if value.contains("ac") { return "AC" }
+        if value.contains("plumb") { return "PL" }
+        if value.contains("electric") { return "EL" }
+        if value.contains("clean") { return "CL" }
+        if value.contains("paint") { return "PT" }
+        return String(title.prefix(2)).uppercased()
+    }
+
+    private var accent: Color {
+        let value = title.lowercased()
+        if value.contains("ro") { return AppTheme.blue }
+        if value.contains("laundry") { return AppTheme.purple }
+        if value.contains("clean") { return AppTheme.green }
+        return AppTheme.rose
+    }
+
+    private var bg: Color {
+        let value = title.lowercased()
+        if value.contains("ro") { return AppTheme.blueSoft }
+        if value.contains("laundry") { return Color(hex: 0xF5E9FF) }
+        if value.contains("clean") { return AppTheme.greenSoft }
+        return AppTheme.roseSoft
     }
 }
 
@@ -138,57 +338,70 @@ struct PartnerBookingCard: View {
     var secondaryAction: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+        Button(action: primaryAction) {
+            HStack(alignment: .center, spacing: 12) {
+                ServiceBadge(title: booking.serviceName)
+
+                VStack(alignment: .leading, spacing: 5) {
                     Text(booking.serviceName)
-                        .font(.headline.weight(.black))
+                        .font(.system(size: 15, weight: .black))
                         .foregroundStyle(AppTheme.ink)
-                    Text(booking.displayId)
-                        .font(.caption.weight(.bold))
+                        .lineLimit(2)
+                        .safeText()
+                    Text(booking.issue.isEmpty ? "Customer requested inspection" : booking.issue)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
+                        .safeText()
+                    Text("\(booking.city) | \(booking.slot)")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(AppTheme.muted)
+                        .lineLimit(2)
+                    Text(booking.displayId)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(AppTheme.muted)
+                        .lineLimit(1)
                 }
-                Spacer()
-                Text(booking.statusLabel)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(booking.status == "completed" ? AppTheme.green : AppTheme.rose)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(booking.status == "completed" ? AppTheme.greenSoft : AppTheme.roseSoft, in: Capsule())
-            }
-            Text(booking.issue)
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.muted)
-                .lineLimit(2)
-            Label("\(booking.customerName) - \(booking.city)", systemImage: "person.fill")
-                .font(.caption)
-                .foregroundStyle(AppTheme.muted)
-            Label(booking.slot, systemImage: "clock.fill")
-                .font(.caption)
-                .foregroundStyle(AppTheme.muted)
-            HStack {
-                Button(primaryTitle, action: primaryAction)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(AppTheme.rose, in: Capsule())
-                if let secondaryTitle, let secondaryAction {
-                    Button(secondaryTitle, action: secondaryAction)
-                        .font(.subheadline.weight(.bold))
+
+                Spacer(minLength: 6)
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    StatusPill(text: booking.statusLabel, tint: pillTint, background: pillBg)
+                    Text(amountText)
+                        .font(.system(size: 16, weight: .black))
                         .foregroundStyle(AppTheme.ink)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(AppTheme.roseSoft, in: Capsule())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(primaryTitle)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppTheme.rose)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 8)
+                        .background(Color.white, in: Capsule())
+                        .overlay(Capsule().stroke(Color(hex: 0xF4B9BE), lineWidth: 1))
+                    if let secondaryTitle, let secondaryAction {
+                        Button(secondaryTitle, action: secondaryAction)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppTheme.ink)
+                    }
                 }
-                Spacer()
-                if booking.amount > 0 {
-                    Text("Rs \(booking.amount)")
-                        .font(.subheadline.weight(.black))
-                }
+                .frame(minWidth: 82, alignment: .trailing)
             }
+            .androidCard(cornerRadius: 20, padding: 12)
         }
-        .cardStyle()
+        .buttonStyle(.plain)
+    }
+
+    private var amountText: String {
+        booking.amount > 0 ? "Rs \(booking.amount)" : "Quote"
+    }
+
+    private var pillTint: Color {
+        booking.status == "completed" ? AppTheme.green : booking.isActive ? AppTheme.green : AppTheme.roseDark
+    }
+
+    private var pillBg: Color {
+        booking.status == "completed" || booking.isActive ? AppTheme.greenSoft : AppTheme.roseSoft
     }
 }
 
@@ -199,20 +412,24 @@ struct StatTile: View {
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(tint.opacity(0.12), in: Circle())
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text(value)
-                .font(.headline.weight(.black))
+                .font(.system(size: 18, weight: .black))
                 .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
             Text(title)
-                .font(.caption)
+                .font(.system(size: 11))
                 .foregroundStyle(AppTheme.muted)
+                .lineLimit(2)
+                .safeText()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle(padding: 12)
+        .androidCard(cornerRadius: 16, padding: 12)
     }
 }
 
@@ -220,14 +437,15 @@ struct PartnerBottomNav: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             nav("Home", "house.fill", .dashboard)
             nav("Bookings", "briefcase.fill", .bookings)
             nav("Earnings", "wallet.pass.fill", .earnings)
             nav("Profile", "person.fill", .profile)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .background(Color.white)
         .overlay(Rectangle().fill(AppTheme.line).frame(height: 1), alignment: .top)
     }
@@ -238,11 +456,17 @@ struct PartnerBottomNav: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: image)
-                Text(title).font(.caption2.weight(.semibold))
+                    .font(.system(size: 17, weight: .bold))
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             .foregroundStyle(store.screen == screen ? AppTheme.rose : AppTheme.muted)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -253,17 +477,21 @@ struct EmptyState: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "tray")
-                .font(.title)
+                .font(.title2)
                 .foregroundStyle(AppTheme.rose)
             Text(title)
-                .font(.headline.weight(.black))
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(AppTheme.ink)
+                .multilineTextAlignment(.center)
+                .safeText()
             Text(subtitle)
-                .font(.subheadline)
+                .font(.system(size: 13))
                 .foregroundStyle(AppTheme.muted)
                 .multilineTextAlignment(.center)
+                .safeText()
         }
         .frame(maxWidth: .infinity)
-        .cardStyle()
+        .androidCard()
     }
 }
 

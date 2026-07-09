@@ -8,5 +8,5 @@ enum AppConfig {
     static let defaultLongitude = 91.7362
     static let refreshSeconds: UInt64 = 3_500_000_000
     static let locationHeartbeatSeconds: UInt64 = 10_000_000_000
-    static let maxDocumentBytes = 4 * 1024 * 1024
+    static let maxDocumentBytes = 5 * 1024 * 1024
 }

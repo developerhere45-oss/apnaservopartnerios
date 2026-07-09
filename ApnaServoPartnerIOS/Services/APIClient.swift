@@ -110,6 +110,10 @@ final class APIClient {
         let _: EmptyResponse? = try? await request(path: "/notifications/\(notificationId)/read?role=partner", method: "PATCH", token: token, body: [:])
     }
 
+    func markAllNotificationsRead(token: String) async {
+        let _: EmptyResponse? = try? await request(path: "/notifications/read-all?role=partner", method: "PATCH", token: token, body: [:])
+    }
+
     func setOnline(_ online: Bool, token: String) async throws {
         let _: EmptyResponse = try await request(path: online ? "/partners/online" : "/partners/offline", method: "POST", token: token, body: [:])
     }
@@ -353,6 +357,7 @@ final class APIClient {
     private func mimeType(for fileURL: URL) -> String {
         switch fileURL.pathExtension.lowercased() {
         case "png": return "image/png"
+        case "pdf": return "application/pdf"
         default: return "image/jpeg"
         }
     }
@@ -409,6 +414,17 @@ final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
         } catch {
             return false
         }
+    }
+
+    func showBookingRequestNotification(_ booking: PartnerBooking) {
+        let content = UNMutableNotificationContent()
+        content.title = "New \(booking.serviceName) booking"
+        content.body = "\(booking.customerName) | \(booking.city) | \(booking.slot)"
+        content.sound = .default
+        content.categoryIdentifier = "booking_request"
+        content.userInfo = ["bookingId": booking.id, "bookingCode": booking.bookingCode]
+        let request = UNNotificationRequest(identifier: "booking-\(booking.id)", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
