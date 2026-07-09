@@ -22,6 +22,8 @@ final class PartnerAppStore: ObservableObject {
     @Published var aadhaarLast4 = ""
     @Published var documentStatuses: [String: String] = [:]
     @Published var uploadingDocumentType = ""
+    @Published var realtimeConnected = false
+    @Published var lastRealtimeSyncAt: Date?
 
     private let api = APIClient()
     private let secureStore = SecureStore()
@@ -34,6 +36,7 @@ final class PartnerAppStore: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private var notifiedPendingBookingIds = Set<String>()
+    private var realtimeFailureCount = 0
 
     init() {
         loadLocalState()
@@ -121,10 +124,16 @@ final class PartnerAppStore: ObservableObject {
         refreshTask?.cancel()
         heartbeatTask?.cancel()
         profile = PartnerProfile()
+        authToken = ""
+        fcmToken = ""
         bookings = []
         selectedBooking = nil
+        realtimeConnected = false
+        lastRealtimeSyncAt = nil
+        secureStore.set("", for: tokenKey)
         defaults.removeObject(forKey: profileKey)
         defaults.removeObject(forKey: bookingsKey)
+        defaults.removeObject(forKey: "partner_fcm_token")
         screen = .login
     }
 
@@ -169,27 +178,47 @@ final class PartnerAppStore: ObservableObject {
         }
     }
 
-    func refreshAll() async {
-        await fetchBookings()
-        await fetchNotifications()
-    }
-
-    func fetchBookings() async {
-        guard !authToken.isEmpty else { return }
-        do {
-            let live = try await api.fetchPartnerBookings(token: authToken)
-            mergeBookings(live)
-        } catch {
-            errorMessage = error.localizedDescription
+    func refreshAll(silent: Bool = false) async {
+        let bookingsOK = await fetchBookings(surfaceErrors: !silent)
+        let notificationsOK = await fetchNotifications(surfaceErrors: !silent)
+        if bookingsOK || notificationsOK {
+            realtimeConnected = true
+            realtimeFailureCount = 0
+            lastRealtimeSyncAt = Date()
+        } else if !authToken.isEmpty {
+            realtimeConnected = false
+            realtimeFailureCount = min(realtimeFailureCount + 1, 8)
         }
     }
 
-    func fetchNotifications() async {
-        guard !authToken.isEmpty else { return }
+    @discardableResult
+    func fetchBookings(surfaceErrors: Bool = true) async -> Bool {
+        guard !authToken.isEmpty else {
+            realtimeConnected = false
+            return false
+        }
+        do {
+            let live = try await api.fetchPartnerBookings(token: authToken)
+            mergeBookings(live)
+            return true
+        } catch {
+            if surfaceErrors { errorMessage = error.localizedDescription }
+            return false
+        }
+    }
+
+    @discardableResult
+    func fetchNotifications(surfaceErrors: Bool = true) async -> Bool {
+        guard !authToken.isEmpty else {
+            realtimeConnected = false
+            return false
+        }
         do {
             notifications = try await api.fetchNotifications(token: authToken)
+            return true
         } catch {
-            errorMessage = error.localizedDescription
+            if surfaceErrors { errorMessage = error.localizedDescription }
+            return false
         }
     }
 
@@ -396,6 +425,11 @@ final class PartnerAppStore: ObservableObject {
                 if scoped { fileURL.stopAccessingSecurityScopedResource() }
             }
             do {
+                let allowedExtensions = ["jpg", "jpeg", "png", "pdf"]
+                guard allowedExtensions.contains(fileURL.pathExtension.lowercased()) else {
+                    errorMessage = "Only JPG, PNG or PDF documents are allowed."
+                    return
+                }
                 let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
                 guard size <= AppConfig.maxDocumentBytes else {
@@ -444,8 +478,9 @@ final class PartnerAppStore: ObservableObject {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshAll()
-                try? await Task.sleep(nanoseconds: AppConfig.refreshSeconds)
+                await self?.refreshAll(silent: true)
+                let delay = await self?.realtimeDelayNanoseconds() ?? AppConfig.refreshSeconds
+                try? await Task.sleep(nanoseconds: delay)
             }
         }
     }
@@ -534,6 +569,14 @@ final class PartnerAppStore: ObservableObject {
 
     private func openExternalURL(_ url: URL) {
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+
+    private func realtimeDelayNanoseconds() -> UInt64 {
+        if realtimeFailureCount == 0 {
+            return AppConfig.refreshSeconds
+        }
+        let seconds = min(30, 4 + realtimeFailureCount * 3)
+        return UInt64(seconds) * 1_000_000_000
     }
 
 }

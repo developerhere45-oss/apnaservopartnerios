@@ -9,6 +9,7 @@ enum AppTheme {
     static let textBlue = Color(hex: 0x172333)
     static let muted = Color(hex: 0x696060)
     static let rose = Color(hex: 0xEF4D70)
+    static let hotPink = Color(hex: 0xF92F68)
     static let roseDark = Color(hex: 0x911243)
     static let roseSoft = Color(hex: 0xFFE9ED)
     static let line = Color(hex: 0xF1E2E0)
@@ -42,9 +43,9 @@ extension View {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(AppTheme.line, lineWidth: 1)
+                    .stroke(Color(hex: 0xF6DDE3), lineWidth: 1)
             )
-            .shadow(color: AppTheme.rose.opacity(0.07), radius: 10, x: 0, y: 5)
+            .shadow(color: Color.black.opacity(0.10), radius: 13, x: 0, y: 7)
     }
 
     func cardStyle(padding: CGFloat = 16) -> some View {
@@ -439,15 +440,20 @@ struct PartnerBottomNav: View {
     var body: some View {
         HStack(spacing: 0) {
             nav("Home", "house.fill", .dashboard)
-            nav("Bookings", "briefcase.fill", .bookings)
+            nav("Bookings", "calendar", .bookings)
             nav("Earnings", "wallet.pass.fill", .earnings)
             nav("Profile", "person.fill", .profile)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 34, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(Color(hex: 0xF2D9DE), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, 22)
         .padding(.bottom, 8)
-        .background(Color.white)
-        .overlay(Rectangle().fill(AppTheme.line).frame(height: 1), alignment: .top)
     }
 
     private func nav(_ title: String, _ image: String, _ screen: PartnerScreen) -> some View {
@@ -456,17 +462,36 @@ struct PartnerBottomNav: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: image)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 22, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
-            .foregroundStyle(store.screen == screen ? AppTheme.rose : AppTheme.muted)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .foregroundStyle(isActive(screen) ? AppTheme.hotPink : Color(hex: 0x858585))
+            .frame(maxWidth: .infinity, minHeight: 58)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func isActive(_ item: PartnerScreen) -> Bool {
+        switch (item, store.screen) {
+        case (.dashboard, .dashboard),
+             (.bookings, .bookings),
+             (.earnings, .earnings):
+            return true
+        case (.profile, .profile),
+             (.profile, .personalInfo),
+             (.profile, .documents),
+             (.profile, .myServices),
+             (.profile, .settings),
+             (.profile, .legal),
+             (.profile, .support):
+            return true
+        default:
+            return false
+        }
     }
 }
 

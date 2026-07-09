@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct PartnerAppView: View {
@@ -18,47 +19,34 @@ struct PartnerAppView: View {
         .task {
             await store.refreshAll()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await store.refreshAll() }
+        }
     }
 
     private var showsBottomNav: Bool {
-        ![.support, .bookingChat, .map, .request].contains(store.screen)
+        ![.request, .bookingChat, .map].contains(store.screen)
     }
 
     @ViewBuilder
     private var content: some View {
         switch store.screen {
-        case .dashboard:
-            DashboardScreen()
-        case .request:
-            IncomingRequestScreen()
-        case .detail:
-            OrderDetailScreen()
-        case .bookings:
-            PartnerBookingsScreen()
-        case .earnings:
-            EarningsScreen()
-        case .map:
-            PartnerMapScreen()
-        case .notifications:
-            PartnerNotificationsScreen()
-        case .profile:
-            PartnerProfileScreen()
-        case .personalInfo:
-            PersonalInfoScreen()
-        case .documents:
-            DocumentsScreen()
-        case .myServices:
-            MyServicesScreen()
-        case .settings:
-            PartnerSettingsScreen()
-        case .legal:
-            PartnerLegalScreen()
-        case .support:
-            PartnerSupportChatScreen()
-        case .bookingChat:
-            BookingChatView()
-        case .login:
-            PartnerLoginView()
+        case .dashboard: DashboardScreen()
+        case .request: IncomingRequestScreen()
+        case .detail: OrderDetailScreen()
+        case .bookings: PartnerBookingsScreen()
+        case .earnings: EarningsScreen()
+        case .map: PartnerMapScreen()
+        case .notifications: PartnerNotificationsScreen()
+        case .profile: PartnerProfileScreen()
+        case .personalInfo: PersonalInfoScreen()
+        case .documents: DocumentsScreen()
+        case .myServices: MyServicesScreen()
+        case .settings: PartnerSettingsScreen()
+        case .legal: PartnerLegalScreen()
+        case .support: PartnerSupportChatScreen()
+        case .bookingChat: BookingChatView()
+        case .login: PartnerLoginView()
         }
     }
 }
@@ -66,157 +54,433 @@ struct PartnerAppView: View {
 struct DashboardScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
 
-    private var statsColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 104), spacing: 10)]
+    var body: some View {
+        ReferencePage {
+            HStack(spacing: 14) {
+                PlainHeaderButton(systemImage: "line.3.horizontal") { store.screen = .profile }
+                Spacer()
+                AndroidAssetImage(name: "apna_servo_logo")
+                    .frame(width: 214, height: 72)
+                Spacer()
+                PlainHeaderButton(systemImage: "qrcode.viewfinder") { store.infoMessage = "Partner ID QR opens after backend identity card endpoint is enabled." }
+                PlainHeaderButton(systemImage: "bell") { store.screen = .notifications }
+                    .overlay(alignment: .topTrailing) {
+                        if store.pendingBookings.count + store.notifications.filter({ !$0.isRead }).count > 0 {
+                            Circle().fill(AppTheme.hotPink).frame(width: 10, height: 10).offset(x: -7, y: 4)
+                        }
+                    }
+            }
+            OnlineStatusCard()
+            HomeStatsStrip()
+            SectionTitleRow(title: "Recent Requests", actionTitle: "View all") { store.screen = .bookings }
+            VisibilityBanner()
+            if store.pendingBookings.isEmpty {
+                WaitingRequestCard()
+            } else {
+                ForEach(store.pendingBookings.prefix(4)) { booking in
+                    HomeRequestCard(booking: booking) { store.openBooking(booking) }
+                }
+            }
+        }
     }
+}
+
+struct PartnerBookingsScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+    @State private var filter: BookingFilter = .all
 
     var body: some View {
-        AndroidPage {
-            AndroidCenteredHeader(
-                title: "ApnaServo Partner",
-                subtitle: "Manage jobs and service updates",
-                trailingSystemImage: "bell.fill",
-                badgeCount: store.pendingBookings.count + store.notifications.filter { !$0.isRead }.count,
-                leadingAction: { store.screen = .profile },
-                trailingAction: { store.screen = .notifications }
-            )
-            onlineCard
-            approvalCard
-            LazyVGrid(columns: statsColumns, spacing: 10) {
-                StatTile(title: "Active Jobs", value: "\(store.activeBookings.count)", systemImage: "briefcase.fill", tint: AppTheme.rose)
-                StatTile(title: "Completed", value: "\(store.completedBookings.count)", systemImage: "checkmark.shield.fill", tint: AppTheme.green)
-                StatTile(title: "Earnings", value: "Rs \(store.totalEarnings)", systemImage: "wallet.pass.fill", tint: AppTheme.purple)
+        ReferencePage {
+            ReferenceHeader(title: "My Bookings", subtitle: "Manage and track your all bookings", backAction: { store.screen = .dashboard })
+            BookingTabs(selection: $filter)
+            SectionTitleRow(title: "Upcoming & Ongoing", actionTitle: "View All") { filter = .all }
+            if filteredBookings.isEmpty {
+                EmptyState(title: "No bookings", subtitle: "Accepted, active and completed jobs will appear here automatically.")
+            } else {
+                ForEach(filteredBookings) { booking in
+                    PremiumBookingCard(booking: booking) {
+                        store.callCustomer(booking)
+                    } detailsAction: {
+                        store.openBooking(booking)
+                    }
+                }
             }
-            SectionHeader(title: "Recent Requests", actionTitle: "Refresh") {
-                Task { await store.fetchBookings() }
-            }
-            recentRequests
-            SectionHeader(title: "Live Updates", actionTitle: "Messages") {
+        }
+    }
+
+    private var filteredBookings: [PartnerBooking] {
+        switch filter {
+        case .all: return store.bookings
+        case .ongoing: return store.bookings.filter { $0.isPending || $0.isActive }
+        case .completed: return store.completedBookings
+        case .cancelled: return store.bookings.filter { ["cancelled", "rejected"].contains($0.status) }
+        }
+    }
+}
+
+struct EarningsScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+    @State private var period: EarningsPeriod = .week
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Earnings", subtitle: "Track your income", backAction: { store.screen = .dashboard }, trailingSystemImage: "bell") {
                 store.screen = .notifications
             }
-            notificationsCard
+            EarningsTabs(selection: $period)
+            EarningsHero(period: period)
+            EarningsBreakdownCard(period: period)
+            TransactionsCard()
+            StatementCard()
+            RewardsBanner()
         }
     }
+}
 
-    private var onlineCard: some View {
-        HStack(spacing: 14) {
-            Circle()
-                .fill(store.profile.online ? AppTheme.green : AppTheme.muted)
-                .frame(width: 18, height: 18)
-                .padding(12)
-                .background(store.profile.online ? AppTheme.greenSoft : AppTheme.line, in: Circle())
+struct PartnerProfileScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(store.profile.online ? "You are Online" : "You are Offline")
-                    .font(.system(size: 16, weight: .black))
+    var body: some View {
+        ReferencePage {
+            HStack(spacing: 18) {
+                AndroidAssetImage(name: "apna_servo_logo")
+                    .frame(width: 190, height: 58)
+                Text("Profile")
+                    .font(.system(size: 34, weight: .black))
                     .foregroundStyle(AppTheme.ink)
-                Text(store.profile.online ? "Receiving nearby requests" : "Turn online to receive bookings")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                    .safeText()
+                Spacer()
             }
-
-            Spacer(minLength: 8)
-
-            Toggle("", isOn: Binding(
-                get: { store.profile.online },
-                set: { _ in store.toggleOnline() }
-            ))
-            .labelsHidden()
+            ProfileSummaryCard()
+            ProfileActionRow(color: Color(hex: 0xDDF8FF), icon: "person", title: "Personal Information", subtitle: "View and update your personal details") { store.screen = .personalInfo }
+            ProfileActionRow(color: Color(hex: 0xEEF0FF), icon: "text.bubble", title: "Documents", subtitle: "Manage your documents and verification") { store.screen = .documents }
+            ProfileActionRow(color: AppTheme.roseSoft, icon: "headphones", title: "Support", subtitle: "Help center and support requests") { store.screen = .support }
+            ProfileActionRow(color: AppTheme.roseSoft, icon: "shield.checkered", title: "Legal & Information", subtitle: "Privacy, terms and account deletion") { store.screen = .legal }
+            ProfileActionRow(color: AppTheme.greenSoft, icon: "wallet.pass", title: "Earnings", subtitle: "View earnings, history and transactions") { store.screen = .earnings }
+            ProfileActionRow(color: AppTheme.orangeSoft, icon: "circle.fill", title: "My Services", subtitle: "Manage services and request matching") { store.screen = .myServices }
+            ProfileActionRow(color: Color(hex: 0xF3E9FF), icon: "slider.horizontal.3", title: "Settings", subtitle: "Preferences and account setup") { store.screen = .settings }
+            Button("Logout") { store.logout() }
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1))
+                .padding(.horizontal, 34)
+                .padding(.top, 10)
         }
-        .androidCard()
     }
+}
 
-    private var approvalCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: store.profile.faceVerified ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(store.profile.faceVerified ? AppTheme.green : AppTheme.orange)
-                .frame(width: 46, height: 46)
-                .background(store.profile.faceVerified ? AppTheme.greenSoft : AppTheme.orangeSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(store.profile.faceVerified ? "Partner verified" : "Verification pending")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                Text(store.profile.skillsLabel.isEmpty ? "Select services and upload documents to receive better matches." : "\(store.profile.skillsLabel) around \(store.profile.serviceArea)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                    .safeText()
+struct PersonalInfoScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Personal Information", subtitle: "", backAction: { store.screen = .profile }, trailingSystemImage: "pencil") {
+                store.infoMessage = "Edit fields from registration/profile sync flow. Backend profile update is enabled."
             }
-            Spacer()
-            Button("Docs") { store.screen = .documents }
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(AppTheme.rose)
-        }
-        .androidCard()
-    }
-
-    private var recentRequests: some View {
-        VStack(spacing: 12) {
-            if store.pendingBookings.isEmpty {
-                emptyRecentRequestCard
-            } else {
-                ForEach(store.pendingBookings.prefix(8)) { booking in
-                    PartnerBookingCard(booking: booking, primaryTitle: "Accept") {
-                        store.openBooking(booking)
+            VStack(spacing: 18) {
+                HStack(spacing: 18) {
+                    ZStack(alignment: .bottomTrailing) {
+                        Circle().fill(AppTheme.roseSoft)
+                        Text(initials(store.profile.name))
+                            .font(.system(size: 42, weight: .black))
+                            .foregroundStyle(AppTheme.hotPink)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 42, height: 42)
+                            .background(AppTheme.hotPink, in: Circle())
                     }
-                }
-            }
-        }
-    }
-
-    private var emptyRecentRequestCard: some View {
-        HStack(spacing: 12) {
-            ServiceBadge(title: store.profile.skillsLabel.isEmpty ? "Service" : store.profile.skillsLabel)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Waiting for matching requests")
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                Text(store.profile.skillsLabel.isEmpty ? "Select services in My Services" : store.profile.skillsLabel)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-                    .lineLimit(2)
-                    .safeText()
-                Text(store.profile.online ? "Stay online to get matched with nearby customers." : "Turn online to start receiving customer requests.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
-                    .safeText()
-            }
-        }
-        .androidCard(cornerRadius: 20, padding: 12)
-    }
-
-    private var notificationsCard: some View {
-        VStack(spacing: 10) {
-            let visibleBookings = Array((store.pendingBookings + store.activeBookings).prefix(4))
-            if visibleBookings.isEmpty && store.notifications.isEmpty {
-                EmptyState(title: "No live messages", subtitle: "Booking requests, chat updates and payout alerts will appear here.")
-            } else {
-                ForEach(visibleBookings) { booking in
-                    NotificationRowView(
-                        icon: "bell.fill",
-                        title: booking.isPending ? "New request available" : "Booking in progress",
-                        message: "\(booking.serviceName) | \(booking.statusLabel)",
-                        tint: booking.isPending ? AppTheme.rose : AppTheme.green,
-                        bg: booking.isPending ? AppTheme.roseSoft : AppTheme.greenSoft,
-                        unread: booking.isPending
-                    ) {
-                        store.openBooking(booking)
-                    }
-                }
-                ForEach(store.notifications.prefix(4)) { item in
-                    NotificationRowView(
-                        icon: "bell.fill",
-                        title: item.title,
-                        message: item.body,
-                        tint: item.type == "payment" ? AppTheme.green : AppTheme.rose,
-                        bg: item.type == "payment" ? AppTheme.greenSoft : AppTheme.roseSoft,
-                        unread: !item.isRead
-                    ) {
-                        store.markNotificationRead(item)
-                        if let booking = store.bookingForNotification(item) {
-                            store.openBooking(booking)
+                    .frame(width: 128, height: 128)
+                    .overlay(Circle().stroke(Color(hex: 0xFAB8CC), lineWidth: 1))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(store.partnerDisplayName)
+                            .font(.system(size: 31, weight: .black))
+                            .foregroundStyle(AppTheme.ink)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                        HStack(spacing: 6) {
+                            Text("Verified Partner")
+                                .font(.system(size: 18, weight: .black))
+                                .foregroundStyle(AppTheme.green)
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.green)
                         }
+                        Text("Manage and update your personal details easily.")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AppTheme.muted)
+                            .safeText()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 16)
+                VStack(spacing: 0) {
+                    ProfileInfoRow(icon: "person", label: "Partner Name", value: store.partnerDisplayName)
+                    Divider().padding(.leading, 88)
+                    ProfileInfoRow(icon: "phone", label: "Phone", value: store.profile.phone.isEmpty ? "Not added" : store.profile.phone)
+                    Divider().padding(.leading, 88)
+                    ProfileInfoRow(icon: "rectangle.text.magnifyingglass", label: "Partner ID", value: store.partnerCode)
+                }
+                .androidCard(cornerRadius: 24, padding: 18)
+            }
+            .androidCard(cornerRadius: 28, padding: 18)
+            SecurityNoticeCard(title: "Your information is secure", subtitle: "We use advanced security to keep your data safe and private.")
+            Button("Save Changes") {
+                store.persistProfile()
+                Task { await store.syncPartnerProfile() }
+            }
+            .primaryButton()
+        }
+    }
+}
+
+struct DocumentsScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+    @State private var importingDocumentType: String?
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Documents", subtitle: "Manage your documents and verification", backAction: { store.screen = .profile })
+            ForEach(requiredDocuments, id: \.self) { name in
+                DocumentUploadRow(title: name, status: status(for: name)) {
+                    importingDocumentType = name
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Aadhaar last 4")
+                    .font(.system(size: 18, weight: .black))
+                TextField("1234", text: $store.aadhaarLast4)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                Button("Submit Verification") { store.submitVerification() }
+                    .primaryButton()
+            }
+            .androidCard(cornerRadius: 24)
+        }
+        .fileImporter(
+            isPresented: Binding(get: { importingDocumentType != nil }, set: { if !$0 { importingDocumentType = nil } }),
+            allowedContentTypes: [.jpeg, .png, .pdf],
+            allowsMultipleSelection: false
+        ) { result in
+            guard let type = importingDocumentType else { return }
+            importingDocumentType = nil
+            if case .success(let urls) = result, let url = urls.first {
+                store.uploadDocument(documentType: type, fileURL: url)
+            }
+        }
+    }
+
+    private var requiredDocuments: [String] {
+        ["Aadhaar Card Front", "Aadhaar Card Back", "PAN Card", "Selfie Verification", "Skill Certificate", "Other Supporting Document"]
+    }
+
+    private func status(for type: String) -> String {
+        if store.uploadingDocumentType == type { return "Uploading" }
+        return store.documentStatuses[type] ?? "Pending"
+    }
+}
+
+struct MyServicesScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "My Services", subtitle: "Manage services and areas", backAction: { store.screen = .profile })
+            HStack(spacing: 24) {
+                SoftIcon(systemImage: "briefcase.fill", color: AppTheme.hotPink, bg: AppTheme.roseSoft, size: 112, iconSize: 52)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("My Services")
+                        .font(.system(size: 28, weight: .black))
+                        .foregroundStyle(AppTheme.ink)
+                    Text("Manage your services and get better request matching")
+                        .font(.system(size: 20))
+                        .foregroundStyle(AppTheme.muted)
+                        .safeText()
+                }
+                Spacer()
+            }
+            .androidCard(cornerRadius: 28, padding: 24)
+            VStack(spacing: 0) {
+                ServiceSettingRow(icon: "square.stack.3d.up.fill", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Selected Services", value: store.profile.skillsLabel.isEmpty ? "Not selected" : store.profile.skillsLabel) {
+                    store.infoMessage = "Use registration service chips to edit selected services. Backend sync is enabled."
+                }
+                Divider().padding(.leading, 116)
+                HStack(spacing: 18) {
+                    SoftIcon(systemImage: "wifi", color: AppTheme.green, bg: AppTheme.greenSoft)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Online Status").font(.system(size: 17)).foregroundStyle(AppTheme.muted)
+                        Text(store.profile.online ? "Online and receiving requests" : "Offline")
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(AppTheme.ink)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(get: { store.profile.online }, set: { _ in store.toggleOnline() }))
+                        .labelsHidden()
+                        .tint(Color(hex: 0x00C853))
+                }
+                .padding(.vertical, 18)
+                Divider().padding(.leading, 116)
+                Menu {
+                    ForEach([5, 10, 25, 50], id: \.self) { km in
+                        Button("\(km) km") { store.profile.serviceRadiusKm = km; store.persistProfile() }
+                    }
+                } label: {
+                    ServiceSettingLabel(icon: "scope", bg: AppTheme.blueSoft, color: Color(hex: 0x4169E1), title: "Service Radius", value: "\(store.profile.serviceRadiusKm) km around \(store.profile.serviceArea)")
+                }
+                Divider().padding(.leading, 116)
+                Menu {
+                    ForEach(["Guwahati", "Dispur", "Ganeshguri", "Zoo Road", "Six Mile"], id: \.self) { area in
+                        Button(area) { store.profile.serviceArea = area; store.persistProfile() }
+                    }
+                } label: {
+                    ServiceSettingLabel(icon: "mappin.circle", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Service Area", value: "\(store.profile.serviceArea), Assam")
+                }
+            }
+            .androidCard(cornerRadius: 28, padding: 24)
+            SecurityNoticeCard(title: "Better visibility, more bookings", subtitle: "Keeping your services and area updated helps us match you with the right customer.")
+            Button("Save Changes") {
+                store.persistProfile()
+                Task { await store.syncPartnerProfile() }
+            }
+            .primaryButton()
+        }
+    }
+}
+
+struct PartnerSettingsScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Settings", subtitle: "Manage your notification and route preferences", backAction: { store.screen = .profile })
+            VStack(spacing: 0) {
+                SettingPreferenceRow(icon: "bell", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Notifications", subtitle: "Manage your notification and route preferences", chip: "Enabled")
+                Divider().padding(.leading, 122)
+                SettingPreferenceRow(icon: "bell.badge", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Booking Alerts", subtitle: "Get notified for new bookings and updates", chip: "Ring + Vibration")
+                Divider().padding(.leading, 122)
+                SettingPreferenceRow(icon: "mappin.circle", bg: AppTheme.blueSoft, color: AppTheme.blue, title: "Map Mode", subtitle: "Choose how map should show your route", chip: "In-app live route")
+            }
+            .androidCard(cornerRadius: 28, padding: 24)
+            HStack(spacing: 20) {
+                SoftIcon(systemImage: "shield.checkered", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your preferences are secure")
+                        .font(.system(size: 18, weight: .black))
+                    Text("We only use these settings to improve your app experience.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(AppTheme.muted)
+                        .safeText()
+                }
+                Spacer()
+                SoftIcon(systemImage: "slider.horizontal.3", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+            }
+            .androidCard(cornerRadius: 24, padding: 20)
+            Button("Save Changes") {
+                Task {
+                    _ = await AppNotificationService().requestPermission()
+                    await store.sendLocationHeartbeat()
+                }
+            }
+            .primaryButton()
+        }
+    }
+}
+
+struct PartnerLegalScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Legal & Information", subtitle: "Privacy, terms and account deletion", backAction: { store.screen = .profile })
+            LegalCard(title: "Privacy Policy", detail: "ApnaServo stores only partner profile, service area, verification, booking and payment records required to operate the platform.")
+            LegalCard(title: "Partner Terms", detail: "Accept only genuine jobs, keep customer communication inside ApnaServo, and update every service status honestly.")
+            LegalCard(title: "Account Deletion", detail: "Deletion requests are sent to backend for review. Legal, statement and compliance records may be retained as required.")
+        }
+    }
+}
+
+struct PartnerSupportChatScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Support", subtitle: "We're here to help you 24/7", backAction: { store.screen = .profile })
+            VStack(alignment: .leading, spacing: 0) {
+                Text("How can we help you today?")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(AppTheme.ink)
+                    .padding(.bottom, 18)
+                SupportOptionRow(icon: "headphones", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Chat with us", subtitle: "Talk to our support team for any help") {
+                    store.sendSupportMessage("I need help from support.")
+                }
+                Divider().padding(.leading, 110)
+                SupportOptionRow(icon: "doc.badge.arrow.up", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Raise a Complaint", subtitle: "Report booking, payment or service issues") {
+                    store.openSupport("Complaint", draft: "I want to raise a complaint about ")
+                }
+                Divider().padding(.leading, 110)
+                SupportOptionRow(icon: "bell.badge", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Cancel Active Booking", subtitle: "Request cancellation with a clear reason") {
+                    store.openSupport("Booking Cancellation", draft: "I need help cancelling my active booking. ")
+                }
+                Divider().padding(.leading, 110)
+                SupportOptionRow(icon: "bell", bg: Color(hex: 0xF3D8FF), color: AppTheme.purple, title: "Track your Issue", subtitle: "Check status of your submitted requests") {
+                    store.infoMessage = "Support ticket tracking will show backend ticket status."
+                }
+                Divider().padding(.leading, 110)
+                SupportOptionRow(icon: "shield.checkered", bg: AppTheme.greenSoft, color: AppTheme.green, title: "Help Center", subtitle: "Find answers to common questions") {
+                    store.infoMessage = "Help center content is loaded from backend knowledge base."
+                }
+            }
+            .androidCard(cornerRadius: 28, padding: 24)
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: "headphones", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("AI Assistant")
+                            .font(.system(size: 22, weight: .black))
+                        Text("Beta")
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(AppTheme.hotPink)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(AppTheme.roseSoft, in: Capsule())
+                    }
+                    Text("Get quick answers to common questions with our AI assistant")
+                        .font(.system(size: 15))
+                        .foregroundStyle(AppTheme.muted)
+                        .safeText()
+                }
+                Spacer()
+                Button("Ask AI") { store.infoMessage = "AI Assistant requires backend AI endpoint before release." }
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(AppTheme.hotPink)
+                    .padding(.horizontal, 20)
+                    .frame(height: 54)
+                    .background(Color.white, in: Capsule())
+                    .overlay(Capsule().stroke(AppTheme.hotPink, lineWidth: 1.5))
+            }
+            .androidCard(cornerRadius: 24, padding: 20)
+        }
+    }
+}
+
+struct PartnerNotificationsScreen: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        ReferencePage {
+            ReferenceHeader(title: "Messages", subtitle: "All your notifications and messages", backAction: { store.screen = .dashboard }, trailingSystemImage: "checkmark.circle") {
+                store.markAllNotificationsRead()
+            }
+            if store.notifications.isEmpty && store.pendingBookings.isEmpty {
+                EmptyState(title: "No notifications", subtitle: "Booking requests, status updates and payout alerts will appear here.")
+            } else {
+                ForEach(store.pendingBookings) { booking in
+                    NotificationRowView(icon: "bell", title: "New request available", detail: "\(booking.serviceName) - \(booking.slot)", unread: true) {
+                        store.openBooking(booking)
+                    }
+                }
+                ForEach(store.notifications) { item in
+                    NotificationRowView(icon: "bell", title: item.title, detail: item.body, unread: !item.isRead) {
+                        store.markNotificationRead(item)
                     }
                 }
             }
@@ -228,109 +492,23 @@ struct IncomingRequestScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "New Request", subtitle: "Available booking", backAction: { store.screen = .dashboard })
-            AndroidPage(showsTopPadding: false) {
-                if let booking = store.selectedBooking {
-                    requestCard(booking)
-                    actionButtons(booking)
-                } else {
-                    EmptyState(title: "No request selected", subtitle: "Open a pending request from dashboard.")
+        ReferencePage {
+            ReferenceHeader(title: "New Request", subtitle: "Available booking", backAction: { store.screen = .dashboard })
+            if let booking = store.selectedBooking {
+                PremiumBookingCard(booking: booking) {
+                    store.callCustomer(booking)
+                } detailsAction: {
+                    store.screen = .detail
                 }
-            }
-        }
-    }
-
-    private func requestCard(_ booking: PartnerBooking) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Available request")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                    Text("Closing this screen keeps the booking in Recent Requests until it is accepted or declined.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
+                VStack(spacing: 12) {
+                    Button(store.loading ? "Accepting..." : "Accept Booking") { store.acceptSelectedBooking() }
+                        .primaryButton()
+                        .disabled(store.loading)
+                    Button("Reject") { store.rejectSelectedBooking() }
+                        .outlineButton()
                 }
-                Spacer()
-                StatusPill(text: "Live", tint: AppTheme.green, background: AppTheme.greenSoft)
-            }
-            .padding(.bottom, 16)
-
-            HStack(spacing: 14) {
-                ServiceBadge(title: booking.serviceName)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(booking.serviceName)
-                        .font(.system(size: 17, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                        .safeText()
-                    Text(booking.issue.isEmpty ? "Customer requested inspection" : booking.issue)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
-                }
-                Spacer()
-                StatusPill(text: "New", tint: AppTheme.roseDark, background: AppTheme.roseSoft)
-            }
-            .padding(.bottom, 14)
-
-            detailBlock("Customer", booking.customerName, value2: booking.customerPhone.isEmpty ? "" : "Protected call available", action: booking.customerPhone.isEmpty ? nil : { store.callCustomer(booking) })
-            detailBlock("Address", booking.address)
-            detailBlock("Issue", booking.issue.isEmpty ? "Customer requested \(booking.serviceName) inspection" : booking.issue)
-            detailBlock("Amount", "Partner enters after work")
-            detailBlock("Slot", booking.slot)
-        }
-        .androidCard()
-    }
-
-    private func detailBlock(_ label: String, _ value: String, value2: String = "", action: (() -> Void)? = nil) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                Text(value.isEmpty ? "Not available" : value)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
-                    .safeText()
-                if !value2.isEmpty {
-                    Text(value2)
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppTheme.rose)
-                }
-            }
-            Spacer()
-            if let action {
-                Button("Call", action: action)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 54, height: 42)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.rose, lineWidth: 1))
-            }
-        }
-        .padding(.vertical, 12)
-        .overlay(Rectangle().fill(AppTheme.line).frame(height: 1), alignment: .bottom)
-    }
-
-    private func actionButtons(_ booking: PartnerBooking) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                Button("Reject") { store.rejectSelectedBooking() }
-                    .outlineButton()
-                Button(store.loading ? "Accepting..." : "Accept") { store.acceptSelectedBooking() }
-                    .primaryButton()
-                    .disabled(store.loading)
-                    .opacity(store.loading ? 0.72 : 1)
-            }
-            VStack(spacing: 10) {
-                Button(store.loading ? "Accepting..." : "Accept") { store.acceptSelectedBooking() }
-                    .primaryButton()
-                    .disabled(store.loading)
-                    .opacity(store.loading ? 0.72 : 1)
-                Button("Reject") { store.rejectSelectedBooking() }
-                    .outlineButton()
+            } else {
+                EmptyState(title: "No request selected", subtitle: "Open a pending request from dashboard.")
             }
         }
     }
@@ -340,1303 +518,1017 @@ struct OrderDetailScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            TopBar(
-                title: "Booking Details",
-                subtitle: store.selectedBooking?.displayId ?? "",
-                backAction: { store.screen = .dashboard },
-                trailingSystemImage: "headphones"
-            ) {
-                store.openSupport("Booking Support", draft: supportDraft)
+        ReferencePage {
+            ReferenceHeader(title: "Booking Details", subtitle: store.selectedBooking?.displayId ?? "", backAction: { store.screen = .bookings }, trailingSystemImage: "headphones") {
+                store.screen = .support
             }
-            AndroidPage(showsTopPadding: false) {
-                if let booking = store.selectedBooking {
-                    BookingContactCard(booking: booking)
-                    orderDetailCard(booking)
-                    BookingProgressStepper(booking: booking)
-                    Button {
-                        store.openMap(booking)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "location.north.fill")
-                                .frame(width: 48, height: 48)
-                                .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Start Service")
-                                    .font(.system(size: 16, weight: .black))
-                                Text("Navigate to customer location")
-                                    .font(.system(size: 12))
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right.circle.fill")
-                                .font(.system(size: 28, weight: .bold))
-                        }
-                    }
-                    .greenButton()
-                    acceptedBanner
-                    ServiceStatusTimeline(booking: booking)
-                    statusActionDock(booking)
-                    partnerCancelSupportCard(booking)
-                } else {
-                    EmptyState(title: "No job selected", subtitle: "Open a booking from dashboard.")
+            if let booking = store.selectedBooking {
+                PremiumBookingCard(booking: booking) {
+                    store.callCustomer(booking)
+                } detailsAction: {
+                    store.openMap(booking)
                 }
-            }
-        }
-    }
-
-    private var supportDraft: String {
-        guard let booking = store.selectedBooking else { return "" }
-        return "I need help with booking \(booking.displayId). "
-    }
-
-    private func orderDetailCard(_ booking: PartnerBooking) -> some View {
-        VStack(spacing: 10) {
-            OrderInfoRow(icon: "wrench.and.screwdriver.fill", label: "Service", value: booking.serviceName)
-            OrderInfoRow(icon: "doc.text.fill", label: "Issue", value: booking.issue.isEmpty ? "Customer requested \(booking.serviceName) inspection" : booking.issue)
-            OrderInfoRow(icon: "mappin.and.ellipse", label: "Address", value: booking.address)
-            DateTimeCard(booking: booking)
-        }
-    }
-
-    private var acceptedBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(AppTheme.green)
-                .frame(width: 26, height: 26)
-                .background(Color.white, in: Circle())
-                .overlay(Circle().stroke(AppTheme.green, lineWidth: 1))
-            Text("Booking accepted  |  Let's go!")
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(AppTheme.ink)
-                .safeText()
-            Spacer()
-        }
-        .padding(12)
-        .background(AppTheme.greenSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: 0xD9F1E2), lineWidth: 1))
-    }
-
-    @ViewBuilder
-    private func statusActionDock(_ booking: PartnerBooking) -> some View {
-        if let next = StatusStep.next(for: booking.status) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Update Status")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(AppTheme.ink)
-                        Text(next.hint)
-                            .font(.system(size: 10))
-                            .foregroundStyle(AppTheme.muted)
-                            .safeText()
-                    }
-                    Spacer()
-                    StatusPill(text: "Live", tint: AppTheme.green, background: AppTheme.greenSoft)
+                ServiceTimelineCard(booking: booking)
+                if let next = StatusStep.next(for: booking.status) {
+                    Button(next.label) { store.updateSelectedStatus(next.status) }
+                        .primaryButton()
                 }
-                Button("\(next.label)    >") {
-                    store.updateSelectedStatus(next.status)
-                }
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background(next.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            }
-            .androidCard(cornerRadius: 24, padding: 14)
-        }
-    }
-
-    private func partnerCancelSupportCard(_ booking: PartnerBooking) -> some View {
-        Button {
-            store.openSupport("Booking Cancellation", draft: "I need help cancelling booking \(booking.displayId). ")
-        } label: {
-            HStack(spacing: 12) {
-                Text("!")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 48, height: 48)
-                    .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Cancel via Support")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                    Text("Use only if you cannot visit this customer. Support will receive the reason.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
-                }
-                Spacer()
-                Text("Cancel")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.white, in: Capsule())
-                    .overlay(Capsule().stroke(AppTheme.rose, lineWidth: 1))
-            }
-            .androidCard(cornerRadius: 18, padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct PartnerBookingsScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    @State private var filter = BookingFilter.all
-
-    var body: some View {
-        AndroidPage {
-            AndroidCenteredHeader(
-                title: "My Bookings",
-                subtitle: "Manage and track your all bookings",
-                leadingSystemImage: "line.3.horizontal",
-                trailingSystemImage: "arrow.clockwise",
-                leadingAction: { store.screen = .profile },
-                trailingAction: { Task { await store.fetchBookings() } }
-            )
-            filterTabs
-            SectionHeader(title: "Upcoming & Ongoing", actionTitle: "View All") {
-                filter = .all
-            }
-            if filteredBookings.isEmpty {
-                EmptyState(title: "No bookings", subtitle: "Accepted, active and completed jobs will appear here.")
+                Button("Customer No Response") { store.reportNoResponse(reason: "Customer did not respond") }
+                    .outlineButton()
+                Button("Chat with Customer") { store.openBookingChat(booking) }
+                    .outlineButton()
             } else {
-                ForEach(filteredBookings) { booking in
-                    PartnerBookingCard(
-                        booking: booking,
-                        primaryTitle: booking.isPending ? "Accept" : "Open",
-                        primaryAction: { store.openBooking(booking) },
-                        secondaryTitle: booking.isActive ? "Map" : nil,
-                        secondaryAction: booking.isActive ? { store.openMap(booking) } : nil
-                    )
-                }
+                EmptyState(title: "No job selected", subtitle: "Open a booking from dashboard.")
             }
         }
-    }
-
-    private var filteredBookings: [PartnerBooking] {
-        switch filter {
-        case .all: return store.bookings
-        case .new: return store.pendingBookings
-        case .active: return store.activeBookings
-        case .completed: return store.completedBookings
-        }
-    }
-
-    private var filterTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(BookingFilter.allCases) { item in
-                    Button {
-                        filter = item
-                    } label: {
-                        Text(item.title)
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(filter == item ? .white : AppTheme.ink)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(filter == item ? AppTheme.rose : Color.white, in: Capsule())
-                            .overlay(Capsule().stroke(filter == item ? Color.clear : AppTheme.line, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-}
-
-struct EarningsScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    @State private var period = "Week"
-
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 145), spacing: 10)]
-    }
-
-    var body: some View {
-        AndroidPage {
-            AndroidCenteredHeader(
-                title: "Earnings",
-                subtitle: "Completed jobs and statement",
-                leadingSystemImage: "chevron.left",
-                leadingAction: { store.screen = .dashboard }
-            )
-            periodSelector
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Rs \(store.totalEarnings)")
-                    .font(.system(size: 34, weight: .black))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("Total partner earnings")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.88))
-                HStack {
-                    Label("\(store.completedBookings.count) completed orders", systemImage: "checkmark.circle.fill")
-                    Spacer()
-                    Label("Tips Rs 0", systemImage: "gift.fill")
-                }
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(.white.opacity(0.9))
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(colors: [AppTheme.rose, AppTheme.roseDark], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
-            LazyVGrid(columns: columns, spacing: 10) {
-                StatTile(title: "Today", value: "Rs \(store.todayEarnings)", systemImage: "calendar", tint: AppTheme.rose)
-                StatTile(title: "This Month", value: "Rs \(store.monthEarnings)", systemImage: "chart.bar.fill", tint: AppTheme.orange)
-                StatTile(title: "Completed Orders", value: "\(store.completedBookings.count)", systemImage: "briefcase.fill", tint: AppTheme.blue)
-                StatTile(title: "Tips", value: "Rs 0", systemImage: "gift.fill", tint: AppTheme.green)
-            }
-            statementCard
-            SectionHeader(title: "Transactions")
-            if store.completedBookings.isEmpty {
-                EmptyState(title: "No completed jobs", subtitle: "Completed orders will show as transactions.")
-            } else {
-                ForEach(store.completedBookings) { booking in
-                    PartnerBookingCard(booking: booking, primaryTitle: "Open") {
-                        store.openBooking(booking)
-                    }
-                }
-            }
-        }
-    }
-
-    private var periodSelector: some View {
-        HStack(spacing: 8) {
-            ForEach(["Week", "Month", "All"], id: \.self) { item in
-                Button {
-                    period = item
-                } label: {
-                    Text(item)
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(period == item ? .white : AppTheme.ink)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(period == item ? AppTheme.rose : Color.white, in: Capsule())
-                        .overlay(Capsule().stroke(period == item ? Color.clear : AppTheme.line, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var statementCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Job Statement")
-                .font(.system(size: 16, weight: .black))
-                .foregroundStyle(AppTheme.ink)
-            HStack(spacing: 10) {
-                TextField("From yyyy-mm-dd", text: $store.statementFrom)
-                    .textFieldStyle(.roundedBorder)
-                TextField("To yyyy-mm-dd", text: $store.statementTo)
-                    .textFieldStyle(.roundedBorder)
-            }
-            Button("Download PDF") {
-                store.downloadStatement()
-            }
-            .primaryButton()
-        }
-        .androidCard()
     }
 }
 
 struct PartnerMapScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
-    @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: AppConfig.defaultLatitude, longitude: AppConfig.defaultLongitude),
-        span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-    )
+    @State private var region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: AppConfig.defaultLatitude, longitude: AppConfig.defaultLongitude), span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02))
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar(title: "Service Route", subtitle: store.selectedBooking?.address ?? "", backAction: { store.screen = .detail })
+            TopBar(title: "Live Route", subtitle: store.selectedBooking?.address ?? "", backAction: { store.screen = .detail })
             if let booking = store.selectedBooking {
                 Map(coordinateRegion: $region, annotationItems: [booking]) { item in
                     MapMarker(coordinate: CLLocationCoordinate2D(latitude: item.lat, longitude: item.lng), tint: .red)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     region.center = CLLocationCoordinate2D(latitude: booking.lat, longitude: booking.lng)
                 }
-                .overlay(alignment: .bottom) {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 12) {
-                            MapCustomerCard(booking: booking)
-                            ServiceStatusTimeline(booking: booking)
-                            mapActions(booking)
-                        }
-                        .padding(16)
-                    }
-                    .frame(maxHeight: 430)
-                    .background(.ultraThinMaterial)
+                VStack(spacing: 10) {
+                    Button("Navigate") { store.openAppleMaps(booking) }.greenButton()
+                    Button("Back to Booking") { store.screen = .detail }.outlineButton()
                 }
+                .padding(18)
+                .background(Color.white)
             } else {
                 EmptyState(title: "No map target", subtitle: "Open a booking first.")
                     .padding(18)
             }
         }
-        .background(AppTheme.bg)
-    }
-
-    private func mapActions(_ booking: PartnerBooking) -> some View {
-        VStack(spacing: 10) {
-            Button("Navigate") {
-                store.openAppleMaps(booking)
-            }
-            .greenButton()
-            if booking.isActive {
-                Button("Customer No Response") {
-                    store.reportNoResponse(reason: "Customer did not respond")
-                }
-                .outlineButton()
-            }
-        }
-        .androidCard()
     }
 }
 
-struct PartnerNotificationsScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
+private struct ReferencePage<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            TopBar(
-                title: "Messages",
-                subtitle: "All your notifications and messages",
-                backAction: { store.screen = .dashboard },
-                trailingSystemImage: "checkmark.circle"
-            ) {
-                store.markAllNotificationsRead()
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
+                content
             }
-            AndroidPage(showsTopPadding: false) {
-                if store.notifications.isEmpty && store.pendingBookings.isEmpty && store.activeBookings.isEmpty {
-                    EmptyState(title: "No notifications", subtitle: "Booking requests, chat updates, service status and payout alerts will appear here.")
+            .padding(.horizontal, 30)
+            .padding(.top, 18)
+            .padding(.bottom, 36)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .background(AppTheme.bg.ignoresSafeArea())
+    }
+}
+
+private struct ReferenceHeader: View {
+    let title: String
+    var subtitle: String
+    var backAction: (() -> Void)?
+    var trailingSystemImage: String?
+    var trailingAction: (() -> Void)?
+
+    init(title: String, subtitle: String, backAction: (() -> Void)? = nil, trailingSystemImage: String? = nil, trailingAction: (() -> Void)? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.backAction = backAction
+        self.trailingSystemImage = trailingSystemImage
+        self.trailingAction = trailingAction
+    }
+
+    var body: some View {
+        ZStack {
+            HStack {
+                if let backAction {
+                    PlainHeaderButton(systemImage: "chevron.left", action: backAction)
                 } else {
-                    ForEach(store.pendingBookings) { booking in
-                        NotificationRowView(
-                            icon: "bell.fill",
-                            title: "New request available",
-                            message: "\(booking.serviceName) | \(booking.slot)",
-                            tint: AppTheme.rose,
-                            bg: AppTheme.roseSoft,
-                            unread: true
-                        ) {
-                            store.openBooking(booking)
-                        }
-                    }
-                    ForEach(store.activeBookings) { booking in
-                        NotificationRowView(
-                            icon: "briefcase.fill",
-                            title: "Booking in progress",
-                            message: "\(booking.serviceName) | \(booking.statusLabel)",
-                            tint: AppTheme.green,
-                            bg: AppTheme.greenSoft,
-                            unread: false
-                        ) {
-                            store.openBooking(booking)
-                        }
-                    }
-                    ForEach(store.notifications) { item in
-                        NotificationRowView(
-                            icon: "bell.fill",
-                            title: item.title,
-                            message: item.body,
-                            tint: item.type == "payment" ? AppTheme.green : AppTheme.rose,
-                            bg: item.type == "payment" ? AppTheme.greenSoft : AppTheme.roseSoft,
-                            unread: !item.isRead
-                        ) {
-                            store.markNotificationRead(item)
-                            if let booking = store.bookingForNotification(item) {
-                                store.openBooking(booking)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct PartnerProfileScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-
-    var body: some View {
-        AndroidPage {
-            profileUnifiedCard
-            quickActions
-            profileAction("Personal Information", "Name, phone and profile", "person.fill") { store.screen = .personalInfo }
-            profileAction("Documents", "ID proof and skill certificate", "folder.fill") { store.screen = .documents }
-            profileAction("My Services", "Manage services and request matching", "slider.horizontal.3") { store.screen = .myServices }
-            profileAction("Support", "Chat, complaint, track issue", "headphones") { store.openSupport("Chat") }
-            profileAction("Settings", "Notifications and account", "gearshape.fill") { store.screen = .settings }
-            Button("Logout") { store.logout() }
-                .outlineButton()
-        }
-    }
-
-    private var profileUnifiedCard: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    Circle().fill(LinearGradient(colors: [AppTheme.roseDark, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    if store.profile.photoURL.isEmpty {
-                        Text(initials(store.profile.name))
-                            .font(.system(size: 24, weight: .black))
-                            .foregroundStyle(.white)
-                    } else {
-                        AsyncImage(url: URL(string: store.profile.photoURL)) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            Text(initials(store.profile.name))
-                                .font(.system(size: 24, weight: .black))
-                                .foregroundStyle(.white)
-                        }
-                        .clipShape(Circle())
-                    }
-                }
-                .frame(width: 72, height: 72)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(store.profile.name.isEmpty ? "Partner" : store.profile.name)
-                        .font(.system(size: 20, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                        .safeText()
-                    Text(store.profile.phone.isEmpty ? "Mobile number pending" : store.profile.phone)
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppTheme.muted)
-                    StatusPill(
-                        text: store.profile.faceVerified ? "Face verified" : "Verification pending",
-                        tint: store.profile.faceVerified ? AppTheme.green : AppTheme.orange,
-                        background: store.profile.faceVerified ? AppTheme.greenSoft : AppTheme.orangeSoft
-                    )
+                    PlainHeaderButton(systemImage: "line.3.horizontal") {}
                 }
                 Spacer()
+                if let trailingSystemImage, let trailingAction {
+                    PlainHeaderButton(systemImage: trailingSystemImage, action: trailingAction)
+                } else {
+                    Color.clear.frame(width: 64, height: 64)
+                }
             }
-
-            HStack(spacing: 10) {
-                profileMiniStat("Services", store.profile.skills.count.description)
-                profileMiniStat("Radius", "\(store.profile.serviceRadiusKm) km")
-                profileMiniStat("Area", store.profile.serviceArea)
-            }
-        }
-        .androidCard(cornerRadius: 22)
-    }
-
-    private var quickActions: some View {
-        HStack(spacing: 10) {
-            quickAction("Bookings", "briefcase.fill") { store.screen = .bookings }
-            quickAction("Earnings", "wallet.pass.fill") { store.screen = .earnings }
-            quickAction("Messages", "bell.fill") { store.screen = .notifications }
-        }
-    }
-
-    private func profileMiniStat(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(AppTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(AppTheme.muted)
-        }
-        .frame(maxWidth: .infinity, minHeight: 52)
-        .background(AppTheme.bgLight, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func quickAction(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 36, height: 36)
-                    .background(AppTheme.roseSoft, in: Circle())
+            VStack(spacing: 4) {
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .androidCard(cornerRadius: 16, padding: 10)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func profileAction(_ title: String, _ subtitle: String, _ image: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: image)
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 44, height: 44)
-                    .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 14, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(AppTheme.muted).safeText()
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-            }
-            .androidCard(cornerRadius: 18, padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct PersonalInfoScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "Personal Information", subtitle: "Partner details", backAction: { store.screen = .profile })
-            AndroidPage(showsTopPadding: false) {
-                VStack(spacing: 12) {
-                    TextField("Partner name", text: $store.profile.name)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Phone", text: $store.profile.phone)
-                        .keyboardType(.phonePad)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Email", text: $store.profile.email)
-                        .keyboardType(.emailAddress)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("DD/MM/YYYY", text: $store.profile.dob)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Gender", text: $store.profile.gender)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Full address", text: $store.profile.address)
-                        .textFieldStyle(.roundedBorder)
-                    HStack(spacing: 10) {
-                        TextField("City", text: $store.profile.city)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("State", text: $store.profile.state)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    TextField("PIN Code", text: $store.profile.pinCode)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Emergency phone", text: $store.profile.emergencyContactNumber)
-                        .keyboardType(.phonePad)
-                        .textFieldStyle(.roundedBorder)
-                    Stepper("Years of Experience: \(store.profile.yearsOfExperience)", value: $store.profile.yearsOfExperience, in: 0...80)
-                    TextField("Service Area / Work", text: $store.profile.workingAreas)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Languages Known", text: $store.profile.languages)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        store.persistProfile()
-                        Task { await store.syncPartnerProfile() }
-                    }
-                    .primaryButton()
-                }
-                .androidCard()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Backend Auth")
-                        .font(.system(size: 16, weight: .black))
-                    SecureField("Firebase ID token for API calls", text: $store.authToken)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save Token") {
-                        store.saveAuthToken()
-                    }
-                    .outlineButton()
-                    Text("In production, Firebase Auth will set this token automatically.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.muted)
-                }
-                .androidCard()
-            }
-        }
-    }
-}
-
-struct DocumentsScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    @State private var importingDocumentType: String?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "Documents", subtitle: "Verification", backAction: { store.screen = .profile })
-            AndroidPage(showsTopPadding: false) {
-                documentRow("Aadhaar Card Front", "Upload clear Aadhaar image", required: true)
-                documentRow("Aadhaar Card Back", "Upload clear Aadhaar image", required: true)
-                documentRow("PAN Card", "Upload PAN card image", required: true)
-                documentRow("Selfie Verification", "Upload clear face photo", required: true)
-                documentRow("Skill Certificate", "Upload skill certificate", required: false)
-                documentRow("Training Certificate", "Upload training certificate", required: false)
-                documentRow("Government License", "Upload license if applicable", required: false)
-                documentRow("Trade License", "Upload optional trade license", required: false)
-                documentRow("Other Supporting Document", "Upload any supporting proof", required: false)
-                verificationCard
-            }
-        }
-        .fileImporter(
-            isPresented: Binding(
-                get: { importingDocumentType != nil },
-                set: { if !$0 { importingDocumentType = nil } }
-            ),
-            allowedContentTypes: [.jpeg, .png, .pdf],
-            allowsMultipleSelection: false
-        ) { result in
-            guard let documentType = importingDocumentType else { return }
-            importingDocumentType = nil
-            if case .success(let urls) = result, let url = urls.first {
-                store.uploadDocument(documentType: documentType, fileURL: url)
-            }
-        }
-    }
-
-    private func status(for documentType: String) -> String {
-        if store.uploadingDocumentType == documentType { return "Uploading" }
-        return store.documentStatuses[documentType] ?? (documentType == "Skill Certificate" ? "Required" : "Pending")
-    }
-
-    private func documentRow(_ title: String, _ subtitle: String, required: Bool) -> some View {
-        Button {
-            importingDocumentType = title
-        } label: {
-            HStack(spacing: 12) {
-                let current = status(for: title)
-                Image(systemName: current == "Uploaded" ? "checkmark.seal.fill" : "doc.fill")
-                    .foregroundStyle(current == "Uploaded" ? AppTheme.green : AppTheme.rose)
-                    .frame(width: 44, height: 44)
-                    .background(current == "Uploaded" ? AppTheme.greenSoft : AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
-                }
-                Spacer()
-                StatusPill(
-                    text: current,
-                    tint: current == "Uploaded" ? AppTheme.green : required ? AppTheme.orange : AppTheme.muted,
-                    background: current == "Uploaded" ? AppTheme.greenSoft : required ? AppTheme.orangeSoft : Color(hex: 0xF6F6F6)
-                )
-            }
-            .androidCard(cornerRadius: 18, padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var verificationCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Aadhaar last 4")
-                .font(.system(size: 16, weight: .black))
-            TextField("1234", text: $store.aadhaarLast4)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-            Button("Submit Verification") {
-                store.submitVerification()
-            }
-            .primaryButton()
-            Text("Upload clear and valid verification documents. These files are used only for verification.")
-                .font(.system(size: 12))
-                .foregroundStyle(AppTheme.muted)
-                .safeText()
-        }
-        .androidCard()
-    }
-}
-
-struct MyServicesScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "My Services", subtitle: "Manage services and areas", backAction: { store.screen = .profile })
-            AndroidPage(showsTopPadding: false) {
-                myServicesHero
-                myServicesRows
-                serviceVisibilityCard
-                SkillPickerGrid()
-                    .androidCard()
-                Button("Save Changes") {
-                    store.persistProfile()
-                    Task { await store.syncPartnerProfile() }
-                }
-                .primaryButton()
-            }
-        }
-    }
-
-    private var myServicesHero: some View {
-        HStack(spacing: 16) {
-            AndroidAssetImage(name: "partner_mascot")
-                .frame(width: 78, height: 78)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
-                Text("My Services")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                Text("Manage your services and get better request matching")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                    .safeText()
-            }
-            Spacer()
-        }
-        .androidCard(cornerRadius: 22, padding: 16)
-    }
-
-    private var myServicesRows: some View {
-        VStack(spacing: 0) {
-            serviceDetailRow(icon: "square.stack.3d.up.fill", bg: AppTheme.roseSoft, accent: AppTheme.rose, title: "Selected Services", value: store.profile.skillsLabel, actionLabel: "Edit", action: {})
-            Divider().background(AppTheme.line)
-            serviceDetailRow(icon: "wifi", bg: AppTheme.greenSoft, accent: AppTheme.green, title: "Online Status", value: store.profile.online ? "Online and receiving requests" : "Offline", actionLabel: "", action: { store.toggleOnline() }, showToggle: true)
-            Divider().background(AppTheme.line)
-            serviceDetailRow(icon: "target", bg: AppTheme.blueSoft, accent: AppTheme.blue, title: "Service Radius", value: "\(store.profile.serviceRadiusKm) km around \(store.profile.serviceArea)", actionLabel: "Edit", action: {})
-            radiusPicker
-            Divider().background(AppTheme.line)
-            serviceDetailRow(icon: "location.fill", bg: AppTheme.orangeSoft, accent: AppTheme.orange, title: "Service Area", value: "\(store.profile.serviceArea), Assam", actionLabel: "Edit", action: {})
-            areaPicker
-        }
-        .androidCard(cornerRadius: 20, padding: 14)
-    }
-
-    private func serviceDetailRow(icon: String, bg: Color, accent: Color, title: String, value: String, actionLabel: String, action: @escaping () -> Void, showToggle: Bool = false) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .foregroundStyle(accent)
-                .frame(width: 50, height: 50)
-                .background(bg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                Text(value.isEmpty ? "Not selected" : value)
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                    .lineLimit(2)
-                    .safeText()
-            }
-            Spacer()
-            if showToggle {
-                Toggle("", isOn: Binding(
-                    get: { store.profile.online },
-                    set: { _ in store.toggleOnline() }
-                ))
-                .labelsHidden()
-            } else if !actionLabel.isEmpty {
-                Button(actionLabel, action: action)
-                    .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(AppTheme.rose)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.roseSoft, in: Capsule())
-            }
-        }
-        .padding(.vertical, 12)
-    }
-
-    private var radiusPicker: some View {
-        Picker("Radius", selection: $store.profile.serviceRadiusKm) {
-            ForEach([5, 10, 25, 50], id: \.self) { km in
-                Text("\(km) km").tag(km)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding(.bottom, 8)
-    }
-
-    private var areaPicker: some View {
-        Picker("Area", selection: $store.profile.serviceArea) {
-            ForEach(["Guwahati", "Dispur", "Ganeshguri", "Zoo Road", "Six Mile"], id: \.self) { area in
-                Text(area).tag(area)
-            }
-        }
-        .pickerStyle(.menu)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var serviceVisibilityCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "shield.fill")
-                .foregroundStyle(AppTheme.rose)
-                .frame(width: 58, height: 58)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Better visibility, more bookings")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                Text("Keeping your services and area updated helps us match you with the right customer.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
-                    .safeText()
-            }
-            Spacer()
-        }
-        .androidCard(cornerRadius: 18, padding: 14)
-    }
-}
-
-struct PartnerSettingsScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "Settings", subtitle: "Account and notifications", backAction: { store.screen = .profile })
-            AndroidPage(showsTopPadding: false) {
-                setting("Notifications", "Booking requests, cancellations and updates use APNs plus Firebase Messaging.", "bell.fill") {
-                    Task { _ = await AppNotificationService().requestPermission() }
-                }
-                setting("Map & Location", "Location heartbeat updates /partners/location while online.", "location.fill") {
-                    Task { await store.sendLocationHeartbeat() }
-                }
-                setting("Legal Information", "Privacy, partner terms and account deletion.", "shield.fill") {
-                    store.screen = .legal
-                }
-                Button("Delete Account Request") {
-                    store.requestAccountDeletion()
-                }
-                .outlineButton()
-            }
-        }
-    }
-
-    private func setting(_ title: String, _ subtitle: String, _ image: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: image)
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 44, height: 44)
-                    .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 14, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(AppTheme.muted).safeText()
-                }
-                Spacer()
-            }
-            .androidCard(cornerRadius: 18, padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct PartnerLegalScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: "Legal & Information", subtitle: "Partner terms", backAction: { store.screen = .settings })
-            AndroidPage(showsTopPadding: false) {
-                legalCard("Privacy Policy", "ApnaServo stores profile, service area, verification, booking and payment information to operate the platform and send job updates.")
-                legalCard("Partner Terms & Conditions", "Partners must accept only genuine jobs, keep booking chat and service updates clear, provide verified service and avoid off-app misuse. Fraud, fake documents or unsafe service can restrict the account.")
-                legalCard("Payment Information", "ApnaServo currently connects customers with independent service professionals. Pricing, payment methods and service details should be confirmed inside the booking flow.")
-                legalCard("Account Deletion", "Deletion request is sent to backend for review. Pending bookings, statements and compliance records may be retained as required.")
-            }
-        }
-    }
-
-    private func legalCard(_ title: String, _ content: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 16, weight: .black)).foregroundStyle(AppTheme.ink)
-            Text(content).font(.system(size: 13)).foregroundStyle(AppTheme.muted).safeText()
-        }
-        .androidCard()
-    }
-}
-
-struct PartnerSupportChatScreen: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    @State private var text = ""
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBar(title: store.supportType, subtitle: "Partner Support", backAction: { store.screen = .profile })
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(store.supportMessages) { message in
-                            ChatBubble(message: message, isMe: message.senderRole == "partner")
-                                .id(message.id)
-                        }
-                    }
-                    .padding(18)
-                }
-                .background(AppTheme.bg)
-                .onChange(of: store.supportMessages.count) { _ in
-                    if let last = store.supportMessages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
-            }
-            HStack(spacing: 10) {
-                TextField("Type message", text: $text)
-                    .textFieldStyle(.roundedBorder)
-                Button {
-                    store.sendSupportMessage(text)
-                    text = ""
-                } label: {
-                    Image(systemName: "paperplane.fill")
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(AppTheme.rose, in: Circle())
-                }
-            }
-            .padding(12)
-            .background(Color.white)
-        }
-    }
-}
-
-private struct BookingContactCard: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    let booking: PartnerBooking
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(initials(booking.customerName))
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(AppTheme.rose)
-                .frame(width: 54, height: 54)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(booking.customerName)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                    .safeText()
-                Text("Protected Call")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppTheme.rose)
-                Text("Only you can call this customer")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
-            }
-
-            Spacer()
-
-            VStack(spacing: 8) {
-                Button("Chat") { store.openBookingChat(booking) }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 74, height: 38)
-                    .background(Color.white, in: Capsule())
-                    .overlay(Capsule().stroke(AppTheme.rose, lineWidth: 1))
-                Button("Call") { store.callCustomer(booking) }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 74, height: 38)
-                    .background(LinearGradient(colors: [AppTheme.rose, AppTheme.roseDark], startPoint: .topLeading, endPoint: .bottomTrailing), in: Capsule())
-            }
-        }
-        .androidCard(cornerRadius: 16, padding: 12)
-    }
-}
-
-private struct OrderInfoRow: View {
-    let icon: String
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(AppTheme.rose)
-                .frame(width: 46, height: 46)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.muted)
-                Text(value.isEmpty ? "Not available" : value)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(AppTheme.ink)
-                    .lineLimit(3)
-                    .safeText()
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundStyle(AppTheme.rose)
-        }
-        .androidCard(cornerRadius: 14, padding: 12)
-    }
-}
-
-private struct DateTimeCard: View {
-    let booking: PartnerBooking
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 0) {
-                dateColumn(icon: "calendar", label: "Booking Date", value: bookingDate, sub: "Assigned")
-                Rectangle().fill(AppTheme.line).frame(width: 1, height: 52)
-                dateColumn(icon: "clock.fill", label: "Time", value: booking.slot, sub: "2 hrs")
-            }
-            VStack(spacing: 8) {
-                dateColumn(icon: "calendar", label: "Booking Date", value: bookingDate, sub: "Assigned")
-                dateColumn(icon: "clock.fill", label: "Time", value: booking.slot, sub: "2 hrs")
-            }
-        }
-        .androidCard(cornerRadius: 16, padding: 14)
-    }
-
-    private var bookingDate: String {
-        formatMillis(booking.createdAtMillis)
-    }
-
-    private func dateColumn(icon: String, label: String, value: String, sub: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(AppTheme.rose)
-                .frame(width: 42, height: 42)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
-                Text(value)
-                    .font(.system(size: 14, weight: .black))
+                    .font(.system(size: 33, weight: .black))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Text(sub)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 20))
+                        .foregroundStyle(AppTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
             }
+            .padding(.horizontal, 74)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 74)
     }
 }
 
-private struct BookingProgressStepper: View {
-    let booking: PartnerBooking
+private struct PlainHeaderButton: View {
+    let systemImage: String
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(booking.statusRank > 0 ? "Assigned" : "New request")
-                .font(.system(size: 10, weight: .black))
-                .foregroundStyle(AppTheme.rose)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(AppTheme.roseSoft, in: Capsule())
-                .frame(maxWidth: .infinity, alignment: .center)
-            HStack(spacing: 0) {
-                step("A", "Accept", active: booking.statusRank >= 1)
-                step("W", "On the Way", active: booking.statusRank >= 2)
-                step("R", "Arrived", active: booking.statusRank >= 3)
-                step("C", "Complete", active: booking.statusRank >= 5)
-            }
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(systemImage == "chevron.left" ? AppTheme.hotPink : AppTheme.ink)
+                .frame(width: 64, height: 64)
+                .background(systemImage == "chevron.left" ? Color.white : Color.clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: systemImage == "chevron.left" ? Color.black.opacity(0.10) : .clear, radius: 10, x: 0, y: 5)
         }
-        .androidCard(cornerRadius: 18, padding: 14)
+        .buttonStyle(.plain)
     }
+}
 
-    private func step(_ icon: String, _ label: String, active: Bool) -> some View {
-        VStack(spacing: 6) {
-            Text(active ? "OK" : icon)
+private struct OnlineStatusCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        HStack(spacing: 20) {
+            ZStack {
+                Circle().fill(AppTheme.green.opacity(0.12))
+                Circle().stroke(AppTheme.green.opacity(0.16), lineWidth: 2).padding(12)
+                Circle().fill(Color(hex: 0x00C853)).frame(width: 28, height: 28)
+            }
+            .frame(width: 90, height: 90)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(store.profile.online ? "You are Online" : "You are Offline")
+                    .font(.system(size: 26, weight: .black))
+                    .foregroundStyle(AppTheme.ink)
+                Text(store.profile.online ? "Receiving requests now" : "Switch on to receive requests")
+                    .font(.system(size: 20))
+                    .foregroundStyle(AppTheme.ink)
+                Text(store.profile.online ? "Switch off anytime" : "You can switch on anytime")
+                    .font(.system(size: 18))
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(get: { store.profile.online }, set: { _ in store.toggleOnline() }))
+                .labelsHidden()
+                .tint(Color(hex: 0x00C853))
+                .scaleEffect(1.2)
+        }
+        .androidCard(cornerRadius: 28, padding: 20)
+    }
+}
+
+private struct HomeStatsStrip: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        HStack(spacing: 0) {
+            HomeStat(icon: "briefcase", tint: AppTheme.hotPink, bg: AppTheme.roseSoft, title: "Active Jobs", value: "\(store.activeBookings.count)", footer: "In Progress")
+            StatDivider()
+            HomeStat(icon: "calendar", tint: AppTheme.orange, bg: AppTheme.orangeSoft, title: "Completed Jobs", value: "\(store.completedBookings.count)", footer: "All Time")
+            StatDivider()
+            HomeStat(icon: "shield.checkered", tint: AppTheme.blue, bg: AppTheme.blueSoft, title: "Response Rate", value: "55%", footer: "Excellent", footerTint: AppTheme.green)
+            StatDivider()
+            HomeStat(icon: "star", tint: AppTheme.purple, bg: Color(hex: 0xF9E8FF), title: "Total Earnings", value: "Rs \(store.monthEarnings)", footer: "This Month")
+        }
+        .androidCard(cornerRadius: 28, padding: 18)
+    }
+}
+
+private struct HomeStat: View {
+    let icon: String
+    let tint: Color
+    let bg: Color
+    let title: String
+    let value: String
+    let footer: String
+    var footerTint: Color = AppTheme.muted
+
+    var body: some View {
+        VStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 64, height: 64)
+                .background(bg, in: Circle())
+            Text(title)
                 .font(.system(size: 14, weight: .black))
-                .foregroundStyle(active ? .white : AppTheme.muted)
-                .frame(width: 42, height: 42)
-                .background(active ? AppTheme.rose : Color(hex: 0xF3F1F1), in: Circle())
-                .overlay(Circle().stroke(active ? Color.white : AppTheme.line, lineWidth: 1))
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(active ? AppTheme.ink : AppTheme.muted)
+                .foregroundStyle(AppTheme.ink)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.74)
+                .minimumScaleFactor(0.72)
+            Text(value)
+                .font(.system(size: 28, weight: .black))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+            Text(footer)
+                .font(.system(size: 14))
+                .foregroundStyle(footerTint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
         .frame(maxWidth: .infinity)
     }
 }
 
-private struct ServiceStatusTimeline: View {
-    let booking: PartnerBooking
-
+private struct StatDivider: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            timelineRow(rank: 1, icon: "checkmark", title: "Booking Accepted", subtitle: formatMillis(booking.createdAtMillis), hasNext: true)
-            timelineRow(rank: 2, icon: "car.fill", title: "On The Way", subtitle: booking.statusRank >= 2 ? "ETA: 10 min" : "Pending", hasNext: true)
-            timelineRow(rank: 3, icon: "mappin", title: "Arrived", subtitle: booking.statusRank >= 3 ? "Customer location reached" : "Pending", hasNext: true)
-            timelineRow(rank: 4, icon: "play.fill", title: "Service Started", subtitle: booking.statusRank >= 4 ? "Work is active" : "Pending", hasNext: true)
-            timelineRow(rank: 6, icon: "checkmark", title: "Completed", subtitle: booking.statusRank >= 6 ? "Done" : amountPendingLabel, hasNext: false)
-        }
-        .androidCard(cornerRadius: 20, padding: 18)
-    }
-
-    private var amountPendingLabel: String {
-        booking.status == "amount_pending" ? "Waiting for customer payment" : "Pending"
-    }
-
-    private func timelineRow(rank: Int, icon: String, title: String, subtitle: String, hasNext: Bool) -> some View {
-        let completed = rank == 1 || booking.statusRank >= rank
-        let current = !completed && booking.statusRank + 1 == rank
-        let tint = timelineColor(rank: rank, current: current, completed: completed)
-
-        return HStack(alignment: .top, spacing: 10) {
-            VStack(spacing: 0) {
-                Image(systemName: completed ? "checkmark" : icon)
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle((completed || current) ? .white : AppTheme.muted)
-                    .frame(width: 44, height: 44)
-                    .background(tint, in: Circle())
-                if hasNext {
-                    Rectangle()
-                        .fill(completed ? AppTheme.greenSoft : AppTheme.line)
-                        .frame(width: 3, height: 34)
-                }
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(completed ? AppTheme.green : current ? tint : AppTheme.muted)
-                    .safeText()
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(completed || current ? AppTheme.ink : AppTheme.muted)
-                    .safeText()
-            }
-            Spacer()
-            StatusPill(
-                text: completed ? "Completed" : current ? "In Progress" : "Pending",
-                tint: completed ? AppTheme.green : current ? tint : AppTheme.muted,
-                background: completed ? AppTheme.greenSoft : current ? tint.opacity(0.14) : Color(hex: 0xF6F6F6)
-            )
-        }
-    }
-
-    private func timelineColor(rank: Int, current: Bool, completed: Bool) -> Color {
-        if completed { return AppTheme.green }
-        if !current { return Color(hex: 0xEEEEEE) }
-        if rank == 3 { return AppTheme.blue }
-        if rank == 4 { return AppTheme.orange }
-        if rank >= 6 { return AppTheme.green }
-        return AppTheme.rose
+        Rectangle().fill(Color(hex: 0xF4DCE2)).frame(width: 1, height: 138)
     }
 }
 
-private struct MapCustomerCard: View {
-    @EnvironmentObject private var store: PartnerAppStore
-    let booking: PartnerBooking
+private struct SectionTitleRow: View {
+    let title: String
+    let actionTitle: String
+    let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Text(initials(booking.customerName))
-                    .font(.system(size: 22, weight: .black))
-                    .foregroundStyle(.white)
-                    .frame(width: 60, height: 60)
-                    .background(LinearGradient(colors: [AppTheme.roseDark, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(booking.customerName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                    Text(booking.address)
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppTheme.ink)
-                        .lineLimit(3)
-                        .safeText()
-                }
-                Spacer()
-                Button("Call") { store.callCustomer(booking) }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
-                    .frame(width: 76, height: 40)
-                    .background(Color.white, in: Capsule())
-                    .overlay(Capsule().stroke(AppTheme.rose, lineWidth: 1))
-            }
-            Divider().background(AppTheme.line)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    statusMiniInfo(icon: "wrench.and.screwdriver.fill", label: "Service", value: booking.serviceName)
-                    Rectangle().fill(AppTheme.line).frame(width: 1, height: 52)
-                    statusMiniInfo(icon: "doc.text.fill", label: "Problem", value: booking.issue.isEmpty ? "Inspection" : booking.issue)
-                }
-                VStack(spacing: 8) {
-                    statusMiniInfo(icon: "wrench.and.screwdriver.fill", label: "Service", value: booking.serviceName)
-                    statusMiniInfo(icon: "doc.text.fill", label: "Problem", value: booking.issue.isEmpty ? "Inspection" : booking.issue)
-                }
-            }
+        HStack {
+            Text(title)
+                .font(.system(size: 28, weight: .black))
+                .foregroundStyle(AppTheme.ink)
+            Spacer()
+            Button(actionTitle, action: action)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
         }
-        .androidCard()
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct VisibilityBanner: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        HStack(spacing: 18) {
+            Text(store.profile.online ? "ON" : "OFF")
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(store.profile.online ? AppTheme.green : AppTheme.muted)
+                .frame(width: 82, height: 40)
+                .background(store.profile.online ? AppTheme.greenSoft : Color(hex: 0xF3F3F3), in: Capsule())
+            Text(statusText)
+                .font(.system(size: 17))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(2)
+            Spacer()
+        }
+        .androidCard(cornerRadius: 18, padding: 14)
     }
 
-    private func statusMiniInfo(icon: String, label: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(AppTheme.rose)
-                .frame(width: 44, height: 44)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.muted)
-                Text(value)
-                    .font(.system(size: 12, weight: .black))
+    private var statusText: String {
+        if !store.profile.online {
+            return "You are hidden from customer matching"
+        }
+        return store.realtimeConnected
+            ? "You are visible to customers and receiving new requests"
+            : "Connecting to secure realtime request queue"
+    }
+}
+
+private struct WaitingRequestCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        HStack(spacing: 20) {
+            ServiceBadge(title: store.profile.skillsLabel.isEmpty ? "Service" : store.profile.skillsLabel, size: 106)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Waiting for matching requests")
+                    .font(.system(size: 24, weight: .black))
                     .foregroundStyle(AppTheme.ink)
-                    .lineLimit(3)
+                Text(store.profile.skillsLabel.isEmpty ? "Select services" : store.profile.skillsLabel)
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(AppTheme.hotPink)
+                    .lineLimit(2)
+                    .safeText()
+                Text("Stay online to get matched with nearby customers.")
+                    .font(.system(size: 18))
+                    .foregroundStyle(AppTheme.muted)
                     .safeText()
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .androidCard(cornerRadius: 24, padding: 22)
+    }
+}
+
+private struct HomeRequestCard: View {
+    let booking: PartnerBooking
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 20) {
+                ServiceBadge(title: booking.serviceName, size: 106)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(booking.serviceName)
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundStyle(AppTheme.ink)
+                    Text(booking.issue)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppTheme.hotPink)
+                        .lineLimit(2)
+                        .safeText()
+                    Text("\(booking.city) - \(booking.slot)")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppTheme.muted)
+                        .lineLimit(2)
+                }
+                Spacer()
+                StatusPill(text: booking.statusLabel, tint: AppTheme.orange, background: AppTheme.orangeSoft)
+            }
+            .androidCard(cornerRadius: 24, padding: 22)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct BookingTabs: View {
+    @Binding var selection: BookingFilter
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(BookingFilter.allCases) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    Text(tab.title)
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(selection == tab ? AppTheme.hotPink : AppTheme.ink)
+                        .frame(maxWidth: .infinity, minHeight: 72)
+                        .background(selection == tab ? AppTheme.roseSoft : .clear, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 5)
+    }
+}
+
+private struct PremiumBookingCard: View {
+    let booking: PartnerBooking
+    let callAction: () -> Void
+    let detailsAction: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(alignment: .top, spacing: 22) {
+                ServiceBadge(title: booking.serviceName, size: 138)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("#\(booking.displayId)")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(AppTheme.roseDark)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer()
+                        StatusPill(text: booking.statusLabel == "Accepted" ? "Ongoing" : booking.statusLabel, tint: AppTheme.orange, background: AppTheme.orangeSoft)
+                    }
+                    Text(booking.serviceName)
+                        .font(.system(size: 27, weight: .black))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
+                        .safeText()
+                    BookingMetaRow(mark: "D", value: bookingDateLabel(booking))
+                    BookingMetaRow(mark: "T", value: booking.slot)
+                    BookingMetaRow(mark: "L", value: booking.city)
+                    Text("Note: \(booking.issue.isEmpty ? "Customer requested \(booking.serviceName)" : booking.issue)")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppTheme.roseDark)
+                        .lineLimit(2)
+                        .safeText()
+                }
+            }
+            HStack(spacing: 22) {
+                Button("Call", action: callAction)
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(AppTheme.hotPink)
+                    .frame(maxWidth: .infinity, minHeight: 70)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1.5))
+                Button("View Details", action: detailsAction)
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 70)
+                    .background(LinearGradient(colors: [AppTheme.hotPink, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .shadow(color: AppTheme.hotPink.opacity(0.25), radius: 8, x: 0, y: 5)
+            }
+        }
+        .androidCard(cornerRadius: 26, padding: 22)
+    }
+}
+
+private struct BookingMetaRow: View {
+    let mark: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 20) {
+            Text(mark)
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(AppTheme.muted)
+                .frame(width: 20)
+            Text(value)
+                .font(.system(size: 20))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+    }
+}
+
+private struct EarningsTabs: View {
+    @Binding var selection: EarningsPeriod
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(EarningsPeriod.allCases) { item in
+                Button {
+                    selection = item
+                } label: {
+                    Text(item.title)
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(selection == item ? .white : AppTheme.ink)
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .background(selection == item ? AppTheme.hotPink : .clear, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 5)
+    }
+}
+
+private struct EarningsHero: View {
+    @EnvironmentObject private var store: PartnerAppStore
+    let period: EarningsPeriod
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Wallet - \(period.title)ly Earnings")
+                        .font(.system(size: 21, weight: .black))
+                        .foregroundStyle(.white)
+                    Text("Rs \(amount)")
+                        .font(.system(size: 50, weight: .black))
+                        .foregroundStyle(.white)
+                    Text("\(jobs) completed jobs in this period")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(.white.opacity(0.88))
+                }
+                Spacer()
+                VStack(spacing: 18) {
+                    Image(systemName: "wallet.pass")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 122, height: 118)
+                        .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    Button("View Wallet") {}
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: 128, height: 52)
+                        .background(Color.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.72), lineWidth: 1.5))
+                }
+            }
+            Sparkline()
+                .frame(height: 82)
+                .padding(.top, 4)
+        }
+        .padding(26)
+        .background(LinearGradient(colors: [Color(hex: 0xD90069), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 5)
+    }
+
+    private var amount: Int {
+        switch period {
+        case .today: return store.todayEarnings
+        case .week, .month: return store.monthEarnings
+        }
+    }
+
+    private var jobs: Int {
+        store.completedBookings.count
+    }
+}
+
+private struct Sparkline: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let points: [CGPoint] = [
+                CGPoint(x: 0.02, y: 0.78), CGPoint(x: 0.20, y: 0.48), CGPoint(x: 0.30, y: 0.58),
+                CGPoint(x: 0.40, y: 0.36), CGPoint(x: 0.58, y: 0.46), CGPoint(x: 0.68, y: 0.22),
+                CGPoint(x: 0.86, y: 0.30), CGPoint(x: 0.95, y: 0.10)
+            ].map { CGPoint(x: $0.x * proxy.size.width, y: $0.y * proxy.size.height) }
+            ZStack {
+                Path { path in
+                    guard let first = points.first else { return }
+                    path.move(to: CGPoint(x: first.x, y: proxy.size.height))
+                    points.forEach { path.addLine(to: $0) }
+                    if let last = points.last {
+                        path.addLine(to: CGPoint(x: last.x, y: proxy.size.height))
+                    }
+                    path.closeSubpath()
+                }
+                .fill(Color.white.opacity(0.16))
+                Path { path in
+                    guard let first = points.first else { return }
+                    path.move(to: first)
+                    points.dropFirst().forEach { path.addLine(to: $0) }
+                }
+                .stroke(Color.white.opacity(0.92), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                ForEach(points.indices, id: \.self) { index in
+                    Circle().fill(Color.white).frame(width: 6, height: 6).position(points[index])
+                }
+            }
+        }
+    }
+}
+
+private struct EarningsBreakdownCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+    let period: EarningsPeriod
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: "chart.bar", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                Text("Earnings Breakdown")
+                    .font(.system(size: 27, weight: .black))
+                    .foregroundStyle(AppTheme.ink)
+            }
+            BreakdownRow(icon: "calendar", bg: AppTheme.blueSoft, color: AppTheme.blue, title: "Completed Orders", value: "Rs \(store.totalEarnings)")
+            BreakdownRow(icon: "star", bg: Color(hex: 0xFFFBE7), color: Color(hex: 0xDCA000), title: "Incentives", value: "Rs 0")
+            BreakdownRow(icon: "wifi", bg: AppTheme.greenSoft, color: AppTheme.green, title: "Tips", value: "Rs 0")
+            HStack {
+                Text("Total").font(.system(size: 24, weight: .black))
+                Spacer()
+                Text("Rs \(store.totalEarnings)").font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.hotPink)
+            }
+        }
+        .androidCard(cornerRadius: 28, padding: 24)
+    }
+}
+
+private struct BreakdownRow: View {
+    let icon: String
+    let bg: Color
+    let color: Color
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 22) {
+            SoftIcon(systemImage: icon, color: color, bg: bg, size: 58, iconSize: 24)
+            Text(title)
+                .font(.system(size: 21))
+                .foregroundStyle(AppTheme.ink)
+            Spacer()
+            Text(value)
+                .font(.system(size: 19, weight: .black))
+                .foregroundStyle(AppTheme.ink)
+        }
+    }
+}
+
+private struct TransactionsCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 30) {
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: "scope", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                Text("Transactions")
+                    .font(.system(size: 27, weight: .black))
+            }
+            if store.completedBookings.isEmpty {
+                Text("No verified transaction yet. Completed jobs will appear here automatically.")
+                    .font(.system(size: 17))
+                    .foregroundStyle(AppTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 22)
+            } else {
+                ForEach(store.completedBookings.prefix(5)) { booking in
+                    HStack {
+                        Text(booking.serviceName).font(.system(size: 16, weight: .bold))
+                        Spacer()
+                        Text("Rs \(booking.amount)").font(.system(size: 16, weight: .black))
+                    }
+                }
+            }
+        }
+        .androidCard(cornerRadius: 28, padding: 24)
+    }
+}
+
+private struct StatementCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: "doc.text", color: Color(hex: 0x4169E1), bg: AppTheme.blueSoft)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Job Statement PDF")
+                        .font(.system(size: 27, weight: .black))
+                    Text("Download completed jobs, commission and payout summary.")
+                        .font(.system(size: 17))
+                        .foregroundStyle(AppTheme.muted)
+                        .safeText()
+                }
+            }
+            Button("Download Job Statement") { store.downloadStatement() }
+                .primaryButton()
+        }
+        .androidCard(cornerRadius: 28, padding: 24)
+    }
+}
+
+private struct RewardsBanner: View {
+    var body: some View {
+        HStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Keep up the great work!")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(AppTheme.roseDark)
+                Text("Complete more orders and earn exciting rewards.")
+                    .font(.system(size: 17))
+                    .foregroundStyle(AppTheme.ink)
+                    .safeText()
+                Button("View Rewards") {}
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(AppTheme.hotPink)
+                    .frame(width: 160, height: 52)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1))
+            }
+            Spacer()
+            Image(systemName: "gift.fill")
+                .font(.system(size: 74, weight: .bold))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(width: 130, height: 120)
+        }
+        .androidCard(cornerRadius: 28, padding: 24)
+        .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+}
+
+private struct ProfileSummaryCard: View {
+    @EnvironmentObject private var store: PartnerAppStore
+
+    var body: some View {
+        VStack(spacing: 30) {
+            HStack(spacing: 28) {
+                Circle()
+                    .fill(LinearGradient(colors: [Color(hex: 0xD90069), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 150, height: 150)
+                    .shadow(color: AppTheme.hotPink.opacity(0.25), radius: 8, x: 0, y: 4)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(store.partnerDisplayName)
+                        .font(.system(size: 34, weight: .black))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                    Text("Star 4.7 (4 reviews)")
+                        .font(.system(size: 19))
+                    Text("ID: \(store.partnerCode)")
+                        .font(.system(size: 19))
+                        .foregroundStyle(AppTheme.muted)
+                    Text("OK  Verified Partner")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(AppTheme.green)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(AppTheme.greenSoft, in: Capsule())
+                }
+                Spacer()
+            }
+            HStack(spacing: 0) {
+                ProfileMetric(icon: "calendar", tint: AppTheme.orange, bg: AppTheme.orangeSoft, value: "\(store.completedBookings.count)", label: "Jobs Done")
+                ProfileMetric(icon: "star", tint: Color(hex: 0xDCA000), bg: Color(hex: 0xFFFBE7), value: "4.7", label: "Rating")
+                ProfileMetric(icon: "shield.checkered", tint: AppTheme.blue, bg: AppTheme.blueSoft, value: "55%", label: "Response")
+                ProfileMetric(icon: "briefcase", tint: AppTheme.hotPink, bg: AppTheme.roseSoft, value: "\(store.activeBookings.count)", label: "Active Jobs")
+            }
+        }
+        .androidCard(cornerRadius: 28, padding: 28)
+    }
+}
+
+private struct ProfileMetric: View {
+    let icon: String
+    let tint: Color
+    let bg: Color
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+                .frame(width: 48, height: 48)
+                .background(bg, in: Circle())
+            Text(value).font(.system(size: 25, weight: .black))
+            Text(label).font(.system(size: 15)).foregroundStyle(AppTheme.muted).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct ProfileActionRow: View {
+    let color: Color
+    let icon: String
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 26) {
+                SoftIcon(systemImage: icon, color: icon == "circle.fill" ? AppTheme.orange : AppTheme.hotPink, bg: color, size: 96, iconSize: 38)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
+                    Text(subtitle).font(.system(size: 19)).foregroundStyle(AppTheme.muted).safeText()
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ProfileInfoRow: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 20) {
+            SoftIcon(systemImage: icon, color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(label).font(.system(size: 18)).foregroundStyle(AppTheme.muted)
+                Text(value).font(.system(size: 22, weight: .black)).foregroundStyle(AppTheme.ink)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+private struct SecurityNoticeCard: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 22) {
+            SoftIcon(systemImage: "shield.checkered", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.system(size: 21, weight: .black)).foregroundStyle(AppTheme.ink)
+                Text(subtitle).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+            }
+            Spacer()
+        }
+        .androidCard(cornerRadius: 24, padding: 20)
+    }
+}
+
+private struct DocumentUploadRow: View {
+    let title: String
+    let status: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: status == "Uploaded" ? "checkmark.seal" : "doc", color: status == "Uploaded" ? AppTheme.green : AppTheme.hotPink, bg: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.roseSoft)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink)
+                    Text("JPG, PNG or PDF under 5 MB").font(.system(size: 15)).foregroundStyle(AppTheme.muted)
+                }
+                Spacer()
+                StatusPill(text: status, tint: status == "Uploaded" ? AppTheme.green : AppTheme.orange, background: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.orangeSoft)
+            }
+            .androidCard(cornerRadius: 24, padding: 18)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ServiceSettingRow: View {
+    let icon: String
+    let bg: Color
+    let color: Color
+    let title: String
+    let value: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ServiceSettingLabel(icon: icon, bg: bg, color: color, title: title, value: value)
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 18)
+    }
+}
+
+private struct ServiceSettingLabel: View {
+    let icon: String
+    let bg: Color
+    let color: Color
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 18) {
+            SoftIcon(systemImage: icon, color: color, bg: bg)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.system(size: 17)).foregroundStyle(AppTheme.muted)
+                Text(value).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(2).safeText()
+            }
+            Spacer()
+            Text("Edit")
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(width: 114, height: 58)
+                .background(AppTheme.roseSoft, in: Capsule())
+        }
+        .padding(.vertical, 18)
+    }
+}
+
+private struct SettingPreferenceRow: View {
+    let icon: String
+    let bg: Color
+    let color: Color
+    let title: String
+    let subtitle: String
+    let chip: String
+
+    var body: some View {
+        HStack(spacing: 24) {
+            SoftIcon(systemImage: icon, color: color, bg: bg, size: 96, iconSize: 42)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
+                Text(subtitle).font(.system(size: 20)).foregroundStyle(AppTheme.muted).safeText()
+            }
+            Spacer()
+            Text(chip)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(color)
+                .padding(.horizontal, 18)
+                .frame(height: 48)
+                .background(bg, in: Capsule())
+        }
+        .padding(.vertical, 20)
+    }
+}
+
+private struct SupportOptionRow: View {
+    let icon: String
+    let bg: Color
+    let color: Color
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 26) {
+                SoftIcon(systemImage: icon, color: color, bg: bg, size: 86, iconSize: 36)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(title).font(.system(size: 22, weight: .black)).foregroundStyle(AppTheme.ink)
+                    Text(subtitle).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+                }
+                Spacer()
+            }
+            .padding(.vertical, 18)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct LegalCard: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
+            Text(detail).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+        }
+        .androidCard(cornerRadius: 24)
     }
 }
 
 private struct NotificationRowView: View {
     let icon: String
     let title: String
-    let message: String
-    let tint: Color
-    let bg: Color
+    let detail: String
     let unread: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .foregroundStyle(tint)
-                    .frame(width: 46, height: 46)
-                    .background(bg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(AppTheme.ink)
-                        .safeText()
-                    Text(message)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
+            HStack(spacing: 18) {
+                SoftIcon(systemImage: icon, color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink)
+                    Text(detail).font(.system(size: 16)).foregroundStyle(AppTheme.muted).safeText()
                 }
                 Spacer()
-                if unread {
-                    Circle().fill(AppTheme.rose).frame(width: 10, height: 10)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.rose)
+                if unread { Circle().fill(AppTheme.hotPink).frame(width: 10, height: 10) }
             }
-            .androidCard(cornerRadius: 18, padding: 12)
+            .androidCard(cornerRadius: 24, padding: 18)
         }
         .buttonStyle(.plain)
     }
 }
 
+private struct ServiceTimelineCard: View {
+    let booking: PartnerBooking
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Service Status")
+                .font(.system(size: 24, weight: .black))
+            ForEach(StatusStep.timeline, id: \.status) { step in
+                HStack(spacing: 14) {
+                    Image(systemName: booking.statusRank >= step.rank ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(booking.statusRank >= step.rank ? AppTheme.green : AppTheme.muted)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(step.label).font(.system(size: 17, weight: .black))
+                        Text(booking.statusRank >= step.rank ? "Completed" : "Pending").font(.system(size: 13)).foregroundStyle(AppTheme.muted)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .androidCard(cornerRadius: 24)
+    }
+}
+
+private struct SoftIcon: View {
+    let systemImage: String
+    let color: Color
+    let bg: Color
+    var size: CGFloat = 70
+    var iconSize: CGFloat = 30
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: iconSize, weight: .bold))
+            .foregroundStyle(color)
+            .frame(width: size, height: size)
+            .background(bg, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+}
+
 private enum BookingFilter: String, CaseIterable, Identifiable {
     case all
-    case new
-    case active
+    case ongoing
     case completed
+    case cancelled
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .all: return "All"
-        case .new: return "New"
-        case .active: return "Active"
+        case .ongoing: return "Ongoing"
         case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
         }
     }
+}
+
+private enum EarningsPeriod: String, CaseIterable, Identifiable {
+    case today
+    case week
+    case month
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
 }
 
 private enum StatusStep {
@@ -1666,31 +1558,17 @@ private enum StatusStep {
         }
     }
 
-    var hint: String {
+    var rank: Int {
         switch self {
-        case .complete:
-            return "Complete the job and send the final amount."
-        case .confirmPayment:
-            return "Confirm only after receiving customer payment."
-        default:
-            return "Tap once. The customer will be notified instantly."
+        case .onTheWay: return 2
+        case .arrived: return 3
+        case .started: return 4
+        case .complete: return 5
+        case .confirmPayment: return 6
         }
     }
 
-    var gradient: LinearGradient {
-        let colors: [Color]
-        switch self {
-        case .arrived:
-            colors = [AppTheme.blue, Color(hex: 0x1454C9)]
-        case .started:
-            colors = [AppTheme.orange, Color(hex: 0xE0690F)]
-        case .complete, .confirmPayment:
-            colors = [Color(hex: 0x00A44E), Color(hex: 0x007C3E)]
-        default:
-            colors = [AppTheme.rose, AppTheme.roseDark]
-        }
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
+    static var timeline: [StatusStep] { [.onTheWay, .arrived, .started, .complete, .confirmPayment] }
 
     static func next(for status: String) -> StatusStep? {
         switch status {
@@ -1719,29 +1597,27 @@ private extension PartnerBooking {
 }
 
 private extension PartnerAppStore {
-    func bookingForNotification(_ item: PartnerNotificationItem) -> PartnerBooking? {
-        bookings.first { booking in
-            booking.id == item.bookingId ||
-            booking.bookingCode == item.bookingId ||
-            booking.id == item.bookingCode ||
-            booking.bookingCode == item.bookingCode
-        }
+    var partnerDisplayName: String {
+        profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Partner" : profile.name
+    }
+
+    var partnerCode: String {
+        let digits = profile.phone.filter(\.isNumber)
+        return "ASP\(digits.suffix(4).isEmpty ? "1470" : String(digits.suffix(4)))"
     }
 }
 
 private func initials(_ name: String) -> String {
-    let parts = name
-        .split(separator: " ")
-        .prefix(2)
-        .compactMap { $0.first }
+    let parts = name.split(separator: " ").prefix(2).compactMap(\.first)
     let value = String(parts).uppercased()
-    return value.isEmpty ? "AS" : value
+    return value.isEmpty ? "P" : value
 }
 
-private func formatMillis(_ value: Int64) -> String {
-    guard value > 0 else { return "Today" }
-    let date = Date(timeIntervalSince1970: TimeInterval(value) / 1000)
+private func bookingDateLabel(_ booking: PartnerBooking) -> String {
+    let calendar = Calendar.current
+    let date = Date(timeIntervalSince1970: TimeInterval(booking.createdAtMillis) / 1000)
+    if calendar.isDateInToday(date) { return "Today" }
     let formatter = DateFormatter()
-    formatter.dateFormat = "dd MMM, h:mm a"
+    formatter.dateFormat = "dd MMM yyyy"
     return formatter.string(from: date)
 }
