@@ -142,13 +142,11 @@ struct PartnerProfileScreen: View {
 
     var body: some View {
         ReferencePage {
-            HStack(spacing: 12) {
-                AndroidAssetImage(name: "apna_servo_logo")
-                    .frame(width: 130, height: 40)
+            HStack {
                 Text("Profile")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
-                Spacer()
+                    .frame(maxWidth: .infinity)
             }
             ProfileSummaryCard()
             ProfileActionRow(color: Color(hex: 0xDDF8FF), icon: "person", title: "Personal Information", subtitle: "View and update your personal details") { store.screen = .personalInfo }
