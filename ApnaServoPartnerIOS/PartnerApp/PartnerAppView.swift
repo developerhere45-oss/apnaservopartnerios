@@ -1235,10 +1235,10 @@ struct PartnerLegalScreen: View {
         }
     }
 
-    private func legalCard(_ title: String, _ body: String) -> some View {
+    private func legalCard(_ title: String, _ content: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.system(size: 16, weight: .black)).foregroundStyle(AppTheme.ink)
-            Text(body).font(.system(size: 13)).foregroundStyle(AppTheme.muted).safeText()
+            Text(content).font(.system(size: 13)).foregroundStyle(AppTheme.muted).safeText()
         }
         .androidCard()
     }
