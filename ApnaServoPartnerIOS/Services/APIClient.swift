@@ -8,6 +8,10 @@ import UserNotifications
 import FirebaseMessaging
 #endif
 
+#if canImport(FirebaseCore)
+import FirebaseCore
+#endif
+
 enum APIError: LocalizedError {
     case missingToken
     case invalidURL
@@ -15,7 +19,7 @@ enum APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingToken: return "Firebase ID token missing. Sign in with Firebase or save a temporary development token in Profile."
+        case .missingToken: return "Firebase ID token missing. Sign in with Firebase Phone OTP."
         case .invalidURL: return "Backend URL invalid."
         case .badResponse(let message): return message
         }
@@ -398,22 +402,70 @@ final class SecureStore {
     }
 }
 
+extension Notification.Name {
+    static let apnaServoFCMTokenUpdated = Notification.Name("apnaServoFCMTokenUpdated")
+}
+
 final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = AppNotificationService()
     private(set) var fcmToken = ""
+
+    private override init() {
+        super.init()
+    }
 
     func configure() {
         UNUserNotificationCenter.current().delegate = self
         #if canImport(FirebaseMessaging)
-        fcmToken = Messaging.messaging().fcmToken ?? ""
+        guard FirebaseApp.app() != nil else { return }
+        Messaging.messaging().delegate = self
+        if let token = Messaging.messaging().fcmToken {
+            updateFCMToken(token)
+        }
         #endif
     }
 
     func requestPermission() async -> Bool {
         do {
-            return try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            if granted {
+                await MainActor.run {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+            return granted
         } catch {
             return false
         }
+    }
+
+    func setAPNSToken(_ deviceToken: Data) {
+        #if canImport(FirebaseMessaging)
+        guard FirebaseApp.app() != nil else { return }
+        Messaging.messaging().apnsToken = deviceToken
+        #endif
+    }
+
+    func refreshFCMToken() async -> String {
+        #if canImport(FirebaseMessaging)
+        guard FirebaseApp.app() != nil else { return fcmToken }
+        let token: String = await withCheckedContinuation { continuation in
+            Messaging.messaging().token { token, _ in
+                if let token {
+                    self.updateFCMToken(token)
+                }
+                continuation.resume(returning: self.fcmToken)
+            }
+        }
+        return token
+        #else
+        return fcmToken
+        #endif
+    }
+
+    private func updateFCMToken(_ token: String) {
+        fcmToken = token
+        NotificationCenter.default.post(name: .apnaServoFCMTokenUpdated, object: token)
     }
 
     func showBookingRequestNotification(_ booking: PartnerBooking) {
@@ -431,6 +483,14 @@ final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
         [.banner, .sound, .badge]
     }
 }
+
+#if canImport(FirebaseMessaging)
+extension AppNotificationService: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        updateFCMToken(fcmToken ?? "")
+    }
+}
+#endif
 
 final class LocationService: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()

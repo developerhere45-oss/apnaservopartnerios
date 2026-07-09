@@ -24,10 +24,13 @@ final class PartnerAppStore: ObservableObject {
     @Published var uploadingDocumentType = ""
     @Published var realtimeConnected = false
     @Published var lastRealtimeSyncAt: Date?
+    @Published var phoneVerificationSent = false
+    @Published var phoneOTP = ""
 
     private let api = APIClient()
     private let secureStore = SecureStore()
-    private let notificationService = AppNotificationService()
+    private let notificationService = AppNotificationService.shared
+    private let firebaseAuth = FirebaseAuthService()
     private let locationService = LocationService()
     private let defaults = UserDefaults.standard
     private let profileKey = "apnaservo_partner_profile"
@@ -37,10 +40,26 @@ final class PartnerAppStore: ObservableObject {
     private var heartbeatTask: Task<Void, Never>?
     private var notifiedPendingBookingIds = Set<String>()
     private var realtimeFailureCount = 0
+    private var phoneVerificationID = ""
+    private var fcmTokenObserver: NSObjectProtocol?
 
     init() {
         loadLocalState()
         notificationService.configure()
+        fcmTokenObserver = NotificationCenter.default.addObserver(forName: .apnaServoFCMTokenUpdated, object: nil, queue: .main) { [weak self] notification in
+            guard let token = notification.object as? String else { return }
+            Task { @MainActor in
+                self?.fcmToken = token
+                self?.defaults.set(token, forKey: "partner_fcm_token")
+                await self?.saveFCMTokenIfNeeded()
+            }
+        }
+    }
+
+    deinit {
+        if let fcmTokenObserver {
+            NotificationCenter.default.removeObserver(fcmTokenObserver)
+        }
     }
 
     var hasBackendSession: Bool { !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -64,11 +83,10 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func loadLocalState() {
-        authToken = secureStore.string(for: tokenKey)
         if let data = defaults.data(forKey: profileKey),
            let saved = try? JSONDecoder().decode(PartnerProfile.self, from: data) {
             profile = saved
-            screen = saved.isValid && hasBackendSession ? .dashboard : .login
+            screen = .login
         }
         if let data = defaults.data(forKey: bookingsKey),
            let saved = try? JSONDecoder().decode([PartnerBooking].self, from: data) {
@@ -97,6 +115,47 @@ final class PartnerAppStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    private func refreshBackendToken(forceRefresh: Bool = false) async -> Bool {
+        do {
+            if let token = try await firebaseAuth.currentIDToken(forceRefresh: forceRefresh) {
+                authToken = token
+                secureStore.set(token, for: tokenKey)
+                return true
+            }
+        } catch {
+            if forceRefresh {
+                errorMessage = error.localizedDescription
+            }
+        }
+        return false
+    }
+
+    private func usableAuthToken(forceRefresh: Bool = false) async throws -> String {
+        guard await refreshBackendToken(forceRefresh: forceRefresh) else {
+            throw APIError.missingToken
+        }
+        return authToken
+    }
+
+    private func normalizedPhoneNumber() throws -> String {
+        let raw = profile.phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.hasPrefix("+") {
+            let digits = raw.dropFirst().filter(\.isNumber)
+            guard digits.count >= 10 else { throw FirebaseServiceError.invalidPhone }
+            return "+\(digits)"
+        }
+        let digits = raw.filter(\.isNumber)
+        guard digits.count == 10 else { throw FirebaseServiceError.invalidPhone }
+        return "+91\(digits)"
+    }
+
+    private func maskedPhoneNumber() -> String {
+        let digits = profile.phone.filter(\.isNumber)
+        guard digits.count >= 4 else { return profile.phone }
+        return "******\(digits.suffix(4))"
+    }
+
     func saveAuthToken() {
         authToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !authToken.isEmpty else {
@@ -108,28 +167,67 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func completeLogin() {
+        Task { await completeLoginWithFirebase() }
+    }
+
+    func restoreFirebaseSession() async {
+        guard profile.isValid, !hasBackendSession else { return }
+        do {
+            guard let token = try await firebaseAuth.currentIDToken(forceRefresh: false) else { return }
+            await finishAuthenticatedLogin(token: token, requestNotifications: false)
+        } catch {
+            authToken = ""
+            secureStore.set("", for: tokenKey)
+            screen = .login
+        }
+    }
+
+    private func completeLoginWithFirebase() async {
         guard profile.isValid else {
             errorMessage = "Name, 10 digit phone, aur at least one service required hai."
             return
         }
-        let cleanToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanToken.isEmpty else {
-            errorMessage = "Backend session required hai. Firebase ID token paste/save karo, phir login/register karo."
-            screen = .login
-            return
+        loading = true
+        defer { loading = false }
+        do {
+            if let token = try await firebaseAuth.currentIDToken(forceRefresh: true) {
+                await finishAuthenticatedLogin(token: token, requestNotifications: true)
+                return
+            }
+            if phoneVerificationSent {
+                let code = phoneOTP.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !phoneVerificationID.isEmpty, !code.isEmpty else {
+                    errorMessage = FirebaseServiceError.otpRequired.localizedDescription
+                    return
+                }
+                let token = try await firebaseAuth.confirmPhoneOTP(verificationID: phoneVerificationID, code: code)
+                phoneVerificationSent = false
+                phoneVerificationID = ""
+                phoneOTP = ""
+                await finishAuthenticatedLogin(token: token, requestNotifications: true)
+                return
+            }
+            phoneVerificationID = try await firebaseAuth.startPhoneVerification(phoneNumber: normalizedPhoneNumber())
+            phoneVerificationSent = true
+            infoMessage = "Firebase OTP sent to \(maskedPhoneNumber()). OTP enter karke Continue dabao."
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        authToken = cleanToken
-        secureStore.set(cleanToken, for: tokenKey)
+    }
+
+    private func finishAuthenticatedLogin(token: String, requestNotifications: Bool) async {
+        authToken = token
+        secureStore.set(token, for: tokenKey)
         persistProfile()
         screen = .dashboard
-        Task {
+        if requestNotifications {
             _ = await notificationService.requestPermission()
-            fcmToken = notificationService.fcmToken
-            defaults.set(fcmToken, forKey: "partner_fcm_token")
-            await saveFCMTokenIfNeeded()
-            await syncPartnerProfile()
-            await refreshAll()
         }
+        fcmToken = await notificationService.refreshFCMToken()
+        defaults.set(fcmToken, forKey: "partner_fcm_token")
+        await saveFCMTokenIfNeeded()
+        await syncPartnerProfile()
+        await refreshAll()
         startRealtimePolling()
         startLocationHeartbeat()
     }
@@ -144,6 +242,10 @@ final class PartnerAppStore: ObservableObject {
         selectedBooking = nil
         realtimeConnected = false
         lastRealtimeSyncAt = nil
+        phoneVerificationSent = false
+        phoneVerificationID = ""
+        phoneOTP = ""
+        firebaseAuth.signOut()
         secureStore.set("", for: tokenKey)
         defaults.removeObject(forKey: profileKey)
         defaults.removeObject(forKey: bookingsKey)
@@ -152,27 +254,33 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func syncPartnerProfile() async {
-        guard profile.isValid, !authToken.isEmpty else { return }
+        guard profile.isValid else { return }
         do {
-            try await api.upsertPartnerProfile(profile, fcmToken: fcmToken, token: authToken)
+            let token = try await usableAuthToken()
+            try await api.upsertPartnerProfile(profile, fcmToken: fcmToken, token: token)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func saveFCMTokenIfNeeded() async {
-        guard !authToken.isEmpty, !fcmToken.isEmpty else { return }
+        if fcmToken.isEmpty {
+            fcmToken = await notificationService.refreshFCMToken()
+            defaults.set(fcmToken, forKey: "partner_fcm_token")
+        }
+        guard !fcmToken.isEmpty, hasBackendSession else { return }
         do {
-            try await api.saveFCMToken(fcmToken, token: authToken)
+            let token = try await usableAuthToken()
+            try await api.saveFCMToken(fcmToken, token: token)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func fetchRemoteProfile() async {
-        guard !authToken.isEmpty else { return }
         do {
-            profile = try await api.fetchPartnerProfile(current: profile, token: authToken)
+            let token = try await usableAuthToken()
+            profile = try await api.fetchPartnerProfile(current: profile, token: token)
             persistProfile()
         } catch {
             errorMessage = error.localizedDescription
@@ -184,7 +292,8 @@ final class PartnerAppStore: ObservableObject {
         persistProfile()
         Task {
             do {
-                try await api.setOnline(profile.online, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.setOnline(profile.online, token: token)
                 await syncPartnerProfile()
             } catch {
                 errorMessage = error.localizedDescription
@@ -193,6 +302,10 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func refreshAll(silent: Bool = false) async {
+        guard await refreshBackendToken() else {
+            realtimeConnected = false
+            return
+        }
         let bookingsOK = await fetchBookings(surfaceErrors: !silent)
         let notificationsOK = await fetchNotifications(surfaceErrors: !silent)
         if bookingsOK || notificationsOK {
@@ -207,7 +320,7 @@ final class PartnerAppStore: ObservableObject {
 
     @discardableResult
     func fetchBookings(surfaceErrors: Bool = true) async -> Bool {
-        guard !authToken.isEmpty else {
+        guard await refreshBackendToken() else {
             realtimeConnected = false
             return false
         }
@@ -223,7 +336,7 @@ final class PartnerAppStore: ObservableObject {
 
     @discardableResult
     func fetchNotifications(surfaceErrors: Bool = true) async -> Bool {
-        guard !authToken.isEmpty else {
+        guard await refreshBackendToken() else {
             realtimeConnected = false
             return false
         }
@@ -238,7 +351,8 @@ final class PartnerAppStore: ObservableObject {
 
     func markNotificationRead(_ item: PartnerNotificationItem) {
         Task {
-            await api.markNotificationRead(item.id, token: authToken)
+            let token = (try? await usableAuthToken()) ?? authToken
+            await api.markNotificationRead(item.id, token: token)
             if let index = notifications.firstIndex(where: { $0.id == item.id }) {
                 notifications[index].isRead = true
             }
@@ -247,7 +361,8 @@ final class PartnerAppStore: ObservableObject {
 
     func markAllNotificationsRead() {
         Task {
-            await api.markAllNotificationsRead(token: authToken)
+            let token = (try? await usableAuthToken()) ?? authToken
+            await api.markAllNotificationsRead(token: token)
             for index in notifications.indices {
                 notifications[index].isRead = true
             }
@@ -265,7 +380,8 @@ final class PartnerAppStore: ObservableObject {
         loading = true
         Task {
             do {
-                let accepted = try await api.acceptBooking(booking.id, token: authToken)
+                let token = try await usableAuthToken()
+                let accepted = try await api.acceptBooking(booking.id, token: token)
                 upsertBooking(accepted)
                 selectedBooking = accepted
                 screen = .detail
@@ -282,7 +398,8 @@ final class PartnerAppStore: ObservableObject {
         loading = true
         Task {
             do {
-                try await api.rejectBooking(booking.id, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.rejectBooking(booking.id, token: token)
                 var rejected = booking
                 rejected.status = "rejected"
                 upsertBooking(rejected)
@@ -302,7 +419,8 @@ final class PartnerAppStore: ObservableObject {
         Task {
             let location = await makeLocationPayload(bookingId: booking.id)
             do {
-                let updated = try await api.updateBookingStatus(booking.id, status: status, finalAmount: booking.amount, location: location, token: authToken)
+                let token = try await usableAuthToken()
+                let updated = try await api.updateBookingStatus(booking.id, status: status, finalAmount: booking.amount, location: location, token: token)
                 booking = updated
                 upsertBooking(updated)
                 selectedBooking = booking
@@ -321,7 +439,8 @@ final class PartnerAppStore: ObservableObject {
         Task {
             let location = await makeLocationPayload(bookingId: booking.id)
             do {
-                try await api.reportNoResponse(bookingId: booking.id, reason: reason, location: location, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.reportNoResponse(bookingId: booking.id, reason: reason, location: location, token: token)
                 infoMessage = "No-response report submitted."
             } catch {
                 errorMessage = error.localizedDescription
@@ -345,7 +464,10 @@ final class PartnerAppStore: ObservableObject {
             errorMessage = "Customer phone hidden or unavailable."
             return
         }
-        Task { await api.createCallLog(bookingId: booking.id, action: "start", reason: "", token: authToken) }
+        Task {
+            let token = (try? await usableAuthToken()) ?? authToken
+            await api.createCallLog(bookingId: booking.id, action: "start", reason: "", token: token)
+        }
         openExternalURL(url)
     }
 
@@ -356,10 +478,11 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func loadBookingChat() async {
-        guard let booking = selectedBooking, !authToken.isEmpty else { return }
+        guard let booking = selectedBooking else { return }
         do {
-            messages = try await api.fetchBookingChatMessages(bookingId: booking.id, token: authToken)
-            await api.markBookingChatSeen(bookingId: booking.id, token: authToken)
+            let token = try await usableAuthToken()
+            messages = try await api.fetchBookingChatMessages(bookingId: booking.id, token: token)
+            await api.markBookingChatSeen(bookingId: booking.id, token: token)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -372,11 +495,12 @@ final class PartnerAppStore: ObservableObject {
         messages.append(local)
         Task {
             do {
-                let sent = try await api.sendBookingChatMessage(bookingId: booking.id, message: clean, token: authToken)
+                let token = try await usableAuthToken()
+                let sent = try await api.sendBookingChatMessage(bookingId: booking.id, message: clean, token: token)
                 if let index = messages.firstIndex(where: { $0.id == local.id }) {
                     messages[index] = sent
                 }
-                await api.monitorBookingChat(bookingId: booking.id, message: clean, clientMessageId: sent.clientMessageId, token: authToken)
+                await api.monitorBookingChat(bookingId: booking.id, message: clean, clientMessageId: sent.clientMessageId, token: token)
             } catch {
                 if let index = messages.firstIndex(where: { $0.id == local.id }) {
                     messages[index].deliveryStatus = "failed"
@@ -402,7 +526,8 @@ final class PartnerAppStore: ObservableObject {
         supportMessages.append(local)
         Task {
             do {
-                try await api.createPartnerSupportTicket(category: supportType, message: clean, clientMessageId: clientMessageId, attachmentURL: "", token: authToken)
+                let token = try await usableAuthToken()
+                try await api.createPartnerSupportTicket(category: supportType, message: clean, clientMessageId: clientMessageId, attachmentURL: "", token: token)
                 if let index = supportMessages.firstIndex(where: { $0.id == clientMessageId }) {
                     supportMessages[index].deliveryStatus = "sent"
                 }
@@ -423,7 +548,8 @@ final class PartnerAppStore: ObservableObject {
         }
         Task {
             do {
-                try await api.submitVerification(aadhaarLast4: aadhaarLast4, selfieURL: profile.photoURL, faceVerified: false, selfieVerified: false, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.submitVerification(aadhaarLast4: aadhaarLast4, selfieURL: profile.photoURL, faceVerified: false, selfieVerified: false, token: token)
                 persistProfile()
                 infoMessage = "Verification submitted for review."
             } catch {
@@ -452,7 +578,8 @@ final class PartnerAppStore: ObservableObject {
                 }
                 uploadingDocumentType = documentType
                 documentStatuses[documentType] = "Uploading"
-                try await api.uploadDocument(documentType: documentType, fileURL: fileURL, aadhaarLast4: aadhaarLast4, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.uploadDocument(documentType: documentType, fileURL: fileURL, aadhaarLast4: aadhaarLast4, token: token)
                 documentStatuses[documentType] = "Uploaded"
                 infoMessage = "\(documentType) uploaded for verification."
             } catch {
@@ -466,7 +593,8 @@ final class PartnerAppStore: ObservableObject {
     func requestAccountDeletion(reason: String = "Partner requested account deletion from iOS app") {
         Task {
             do {
-                try await api.requestAccountDeletion(reason: reason, token: authToken)
+                let token = try await usableAuthToken()
+                try await api.requestAccountDeletion(reason: reason, token: token)
                 logout()
                 infoMessage = "Account deletion request submitted."
             } catch {
@@ -478,7 +606,8 @@ final class PartnerAppStore: ObservableObject {
     func downloadStatement() {
         Task {
             do {
-                let data = try await api.downloadStatement(from: statementFrom, to: statementTo, token: authToken)
+                let token = try await usableAuthToken()
+                let data = try await api.downloadStatement(from: statementFrom, to: statementTo, token: token)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent("apnaservo-job-statement.pdf")
                 try data.write(to: url)
                 openExternalURL(url)
@@ -510,10 +639,11 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func sendLocationHeartbeat() async {
-        guard profile.online, !authToken.isEmpty else { return }
+        guard profile.online else { return }
         let payload = await makeLocationPayload(bookingId: activeBookings.first?.id ?? "")
         do {
-            try await api.updateLocation(payload, token: authToken)
+            let token = try await usableAuthToken()
+            try await api.updateLocation(payload, token: token)
             profile.lat = payload.lat
             profile.lng = payload.lng
             persistProfile()

@@ -9,6 +9,8 @@ Open `ApnaServoPartnerIOS.xcodeproj` on macOS in Xcode, select the `ApnaServoPar
 ## Included
 
 - Partner login/register profile flow
+- Firebase Phone Auth with automatic backend ID token refresh
+- Firebase Cloud Messaging/APNs registration for booking alerts
 - Dashboard with online toggle, stats, new/active bookings
 - Request accept/reject and job lifecycle updates
 - Partner GPS heartbeat and Apple Maps navigation
@@ -22,11 +24,11 @@ Open `ApnaServoPartnerIOS.xcodeproj` on macOS in Xcode, select the `ApnaServoPar
 
 ## Xcode Setup
 
-- Add `GoogleService-Info.plist` before enabling Firebase Auth/Messaging.
-- Add Firebase iOS packages if push notifications and automatic Firebase ID tokens are required.
-- Paste and save a Firebase ID token on login/register until automatic Firebase sign-in is wired.
-- Enable APNs/push notification capability for production booking alerts.
-- Set the signing team on the `ApnaServoPartnerIOS` target.
+- Add your Firebase iOS app with bundle ID `com.apnaservo.partnerios`.
+- Download `GoogleService-Info.plist` from Firebase Console and add it to the `ApnaServoPartnerIOS` target.
+- Enable Firebase Authentication Phone provider.
+- Upload your Apple APNs auth key/certificate in Firebase Cloud Messaging settings.
+- Enable Push Notifications capability and set the signing team on the `ApnaServoPartnerIOS` target.
 - Backend base URL is in `ApnaServoPartnerIOS/App/AppConfig.swift`.
 
 This Windows workspace cannot run `xcodebuild`; open the project on macOS and build from Xcode.

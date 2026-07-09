@@ -30,6 +30,9 @@ struct RootView: View {
         } message: {
             Text(store.infoMessage)
         }
+        .task {
+            await store.restoreFirebaseSession()
+        }
     }
 }
 
@@ -81,9 +84,9 @@ struct PartnerLoginView: View {
                 Spacer(minLength: 80)
                 VStack(spacing: 10) {
                     Button {
-                        store.infoMessage = "Google sign-in uses Firebase Auth when Firebase and GoogleSignIn packages are added in Xcode."
+                        mode = .login
                     } label: {
-                        Label("G   Continue with Google", systemImage: "g.circle.fill")
+                        Label("Continue with Phone OTP", systemImage: "phone.badge.checkmark")
                             .outlineButton()
                     }
 
@@ -134,11 +137,12 @@ struct PartnerLoginView: View {
                 authInput("Email address", text: $store.profile.email, icon: "envelope.fill", keyboard: .emailAddress)
                 authInput("Service Area / Work", text: $store.profile.workingAreas, icon: "mappin.and.ellipse")
                 SkillPickerGrid()
-                backendSessionInput
-                Button(buttonTitle) {
+                firebaseAuthPanel
+                Button(store.phoneVerificationSent ? "Verify OTP & Continue" : buttonTitle) {
                     store.completeLogin()
                 }
                 .primaryButton()
+                .disabled(store.loading)
             }
             .androidCard(cornerRadius: 22, padding: 18)
 
@@ -193,9 +197,9 @@ struct PartnerLoginView: View {
                 documentSelectionCards
 
                 SkillPickerGrid()
-                backendSessionInput
+                firebaseAuthPanel
 
-                Button("Register    >") {
+                Button(store.phoneVerificationSent ? "Verify OTP & Register" : "Register    >") {
                     if store.profile.address.isEmpty {
                         store.profile.address = generatedAddress()
                     }
@@ -205,6 +209,7 @@ struct PartnerLoginView: View {
                     store.completeLogin()
                 }
                 .primaryButton()
+                .disabled(store.loading)
             }
             .androidCard(cornerRadius: 22, padding: 18)
 
@@ -267,27 +272,31 @@ struct PartnerLoginView: View {
         )
     }
 
-    private var backendSessionInput: some View {
+    private var firebaseAuthPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Secure Backend Session")
+            Text("Firebase Auth")
                 .font(.system(size: 14, weight: .black))
                 .foregroundStyle(AppTheme.ink)
             HStack(spacing: 10) {
-                Text("KEY")
+                Text(store.phoneVerificationSent ? "OTP" : "FIR")
                     .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(AppTheme.hotPink)
+                    .foregroundStyle(store.hasBackendSession ? AppTheme.green : AppTheme.hotPink)
                     .frame(width: 34, height: 34)
-                    .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                SecureField("Firebase ID token", text: $store.authToken)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-                Button("Save") {
-                    store.saveAuthToken()
+                    .background(store.hasBackendSession ? AppTheme.greenSoft : AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                if store.phoneVerificationSent {
+                    TextField("Enter Firebase OTP", text: $store.phoneOTP)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                } else {
+                    Text(store.hasBackendSession ? "Firebase session connected" : "Phone OTP will verify backend login")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
+                        .safeText()
                 }
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(AppTheme.hotPink)
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 54)
@@ -296,7 +305,7 @@ struct PartnerLoginView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(AppTheme.line, lineWidth: 1)
             )
-            Text("Backend bookings, notifications, documents and earnings use this secure token.")
+            Text(store.phoneVerificationSent ? "OTP verify hote hi backend token auto save hoga." : "Manual token paste nahi; Firebase Auth backend Bearer token generate karega.")
                 .font(.system(size: 11))
                 .foregroundStyle(AppTheme.muted)
                 .safeText()
