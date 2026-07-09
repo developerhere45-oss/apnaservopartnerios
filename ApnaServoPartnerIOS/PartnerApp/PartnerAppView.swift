@@ -196,7 +196,7 @@ struct DashboardScreen: View {
                     NotificationRowView(
                         icon: "bell.fill",
                         title: booking.isPending ? "New request available" : "Booking in progress",
-                        body: "\(booking.serviceName) | \(booking.statusLabel)",
+                        message: "\(booking.serviceName) | \(booking.statusLabel)",
                         tint: booking.isPending ? AppTheme.rose : AppTheme.green,
                         bg: booking.isPending ? AppTheme.roseSoft : AppTheme.greenSoft,
                         unread: booking.isPending
@@ -208,7 +208,7 @@ struct DashboardScreen: View {
                     NotificationRowView(
                         icon: "bell.fill",
                         title: item.title,
-                        body: item.body,
+                        message: item.body,
                         tint: item.type == "payment" ? AppTheme.green : AppTheme.rose,
                         bg: item.type == "payment" ? AppTheme.greenSoft : AppTheme.roseSoft,
                         unread: !item.isRead
@@ -719,7 +719,7 @@ struct PartnerNotificationsScreen: View {
                         NotificationRowView(
                             icon: "bell.fill",
                             title: "New request available",
-                            body: "\(booking.serviceName) | \(booking.slot)",
+                            message: "\(booking.serviceName) | \(booking.slot)",
                             tint: AppTheme.rose,
                             bg: AppTheme.roseSoft,
                             unread: true
@@ -731,7 +731,7 @@ struct PartnerNotificationsScreen: View {
                         NotificationRowView(
                             icon: "briefcase.fill",
                             title: "Booking in progress",
-                            body: "\(booking.serviceName) | \(booking.statusLabel)",
+                            message: "\(booking.serviceName) | \(booking.statusLabel)",
                             tint: AppTheme.green,
                             bg: AppTheme.greenSoft,
                             unread: false
@@ -743,7 +743,7 @@ struct PartnerNotificationsScreen: View {
                         NotificationRowView(
                             icon: "bell.fill",
                             title: item.title,
-                            body: item.body,
+                            message: item.body,
                             tint: item.type == "payment" ? AppTheme.green : AppTheme.rose,
                             bg: item.type == "payment" ? AppTheme.greenSoft : AppTheme.roseSoft,
                             unread: !item.isRead
@@ -1584,7 +1584,7 @@ private struct MapCustomerCard: View {
 private struct NotificationRowView: View {
     let icon: String
     let title: String
-    let body: String
+    let message: String
     let tint: Color
     let bg: Color
     let unread: Bool
@@ -1602,7 +1602,7 @@ private struct NotificationRowView: View {
                         .font(.system(size: 14, weight: .black))
                         .foregroundStyle(AppTheme.ink)
                         .safeText()
-                    Text(body)
+                    Text(message)
                         .font(.system(size: 12))
                         .foregroundStyle(AppTheme.muted)
                         .safeText()
