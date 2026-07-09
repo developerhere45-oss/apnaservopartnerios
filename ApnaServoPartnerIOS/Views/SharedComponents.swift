@@ -126,6 +126,7 @@ struct AndroidPage<Content: View>: View {
             .padding(.bottom, 22)
         }
         .background(AppTheme.bg.ignoresSafeArea())
+        .dynamicTypeSize(.small ... .large)
     }
 }
 
@@ -444,16 +445,16 @@ struct PartnerBottomNav: View {
             nav("Earnings", "wallet.pass.fill", .earnings)
             nav("Profile", "person.fill", .profile)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 34, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(Color(hex: 0xF2D9DE), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 4)
-        .padding(.horizontal, 22)
-        .padding(.bottom, 8)
+        .shadow(color: Color.black.opacity(0.10), radius: 9, x: 0, y: 3)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
     }
 
     private func nav(_ title: String, _ image: String, _ screen: PartnerScreen) -> some View {
@@ -462,14 +463,14 @@ struct PartnerBottomNav: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: image)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
             .foregroundStyle(isActive(screen) ? AppTheme.hotPink : Color(hex: 0x858585))
-            .frame(maxWidth: .infinity, minHeight: 58)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

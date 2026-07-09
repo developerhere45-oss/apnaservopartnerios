@@ -56,11 +56,11 @@ struct DashboardScreen: View {
 
     var body: some View {
         ReferencePage {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 PlainHeaderButton(systemImage: "line.3.horizontal") { store.screen = .profile }
                 Spacer()
                 AndroidAssetImage(name: "apna_servo_logo")
-                    .frame(width: 214, height: 72)
+                    .frame(width: 172, height: 58)
                 Spacer()
                 PlainHeaderButton(systemImage: "qrcode.viewfinder") { store.infoMessage = "Partner ID QR opens after backend identity card endpoint is enabled." }
                 PlainHeaderButton(systemImage: "bell") { store.screen = .notifications }
@@ -142,11 +142,11 @@ struct PartnerProfileScreen: View {
 
     var body: some View {
         ReferencePage {
-            HStack(spacing: 18) {
+            HStack(spacing: 12) {
                 AndroidAssetImage(name: "apna_servo_logo")
-                    .frame(width: 190, height: 58)
+                    .frame(width: 150, height: 46)
                 Text("Profile")
-                    .font(.system(size: 34, weight: .black))
+                    .font(.system(size: 28, weight: .black))
                     .foregroundStyle(AppTheme.ink)
                 Spacer()
             }
@@ -159,12 +159,12 @@ struct PartnerProfileScreen: View {
             ProfileActionRow(color: AppTheme.orangeSoft, icon: "circle.fill", title: "My Services", subtitle: "Manage services and request matching") { store.screen = .myServices }
             ProfileActionRow(color: Color(hex: 0xF3E9FF), icon: "slider.horizontal.3", title: "Settings", subtitle: "Preferences and account setup") { store.screen = .settings }
             Button("Logout") { store.logout() }
-                .font(.system(size: 18, weight: .black))
+                .font(.system(size: 16, weight: .black))
                 .foregroundStyle(AppTheme.hotPink)
-                .frame(maxWidth: .infinity, minHeight: 56)
+                .frame(maxWidth: .infinity, minHeight: 50)
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1))
-                .padding(.horizontal, 34)
+                .padding(.horizontal, 18)
                 .padding(.top, 10)
         }
     }
@@ -179,23 +179,23 @@ struct PersonalInfoScreen: View {
                 store.infoMessage = "Edit fields from registration/profile sync flow. Backend profile update is enabled."
             }
             VStack(spacing: 18) {
-                HStack(spacing: 18) {
+                HStack(spacing: 14) {
                     ZStack(alignment: .bottomTrailing) {
                         Circle().fill(AppTheme.roseSoft)
                         Text(initials(store.profile.name))
-                            .font(.system(size: 42, weight: .black))
+                            .font(.system(size: 30, weight: .black))
                             .foregroundStyle(AppTheme.hotPink)
                         Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
-                            .frame(width: 42, height: 42)
+                            .frame(width: 32, height: 32)
                             .background(AppTheme.hotPink, in: Circle())
                     }
-                    .frame(width: 128, height: 128)
+                    .frame(width: 88, height: 88)
                     .overlay(Circle().stroke(Color(hex: 0xFAB8CC), lineWidth: 1))
                     VStack(alignment: .leading, spacing: 6) {
                         Text(store.partnerDisplayName)
-                            .font(.system(size: 31, weight: .black))
+                            .font(.system(size: 24, weight: .black))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
@@ -206,7 +206,7 @@ struct PersonalInfoScreen: View {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.green)
                         }
                         Text("Manage and update your personal details easily.")
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                             .foregroundStyle(AppTheme.muted)
                             .safeText()
                     }
@@ -285,32 +285,34 @@ struct MyServicesScreen: View {
     var body: some View {
         ReferencePage {
             ReferenceHeader(title: "My Services", subtitle: "Manage services and areas", backAction: { store.screen = .profile })
-            HStack(spacing: 24) {
-                SoftIcon(systemImage: "briefcase.fill", color: AppTheme.hotPink, bg: AppTheme.roseSoft, size: 112, iconSize: 52)
+            HStack(spacing: 16) {
+                SoftIcon(systemImage: "briefcase.fill", color: AppTheme.hotPink, bg: AppTheme.roseSoft, size: 74, iconSize: 32)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("My Services")
-                        .font(.system(size: 28, weight: .black))
+                        .font(.system(size: 22, weight: .black))
                         .foregroundStyle(AppTheme.ink)
                     Text("Manage your services and get better request matching")
-                        .font(.system(size: 20))
+                        .font(.system(size: 16))
                         .foregroundStyle(AppTheme.muted)
                         .safeText()
                 }
                 Spacer()
             }
-            .androidCard(cornerRadius: 28, padding: 24)
+            .androidCard(cornerRadius: 24, padding: 18)
             VStack(spacing: 0) {
                 ServiceSettingRow(icon: "square.stack.3d.up.fill", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Selected Services", value: store.profile.skillsLabel.isEmpty ? "Not selected" : store.profile.skillsLabel) {
                     store.infoMessage = "Use registration service chips to edit selected services. Backend sync is enabled."
                 }
-                Divider().padding(.leading, 116)
-                HStack(spacing: 18) {
+                Divider().padding(.leading, 82)
+                HStack(spacing: 14) {
                     SoftIcon(systemImage: "wifi", color: AppTheme.green, bg: AppTheme.greenSoft)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Online Status").font(.system(size: 17)).foregroundStyle(AppTheme.muted)
                         Text(store.profile.online ? "Online and receiving requests" : "Offline")
                             .font(.system(size: 20, weight: .black))
                             .foregroundStyle(AppTheme.ink)
+                            .lineLimit(2)
+                            .safeText()
                     }
                     Spacer()
                     Toggle("", isOn: Binding(get: { store.profile.online }, set: { _ in store.toggleOnline() }))
@@ -318,7 +320,7 @@ struct MyServicesScreen: View {
                         .tint(Color(hex: 0x00C853))
                 }
                 .padding(.vertical, 18)
-                Divider().padding(.leading, 116)
+                Divider().padding(.leading, 82)
                 Menu {
                     ForEach([5, 10, 25, 50], id: \.self) { km in
                         Button("\(km) km") { store.profile.serviceRadiusKm = km; store.persistProfile() }
@@ -326,7 +328,7 @@ struct MyServicesScreen: View {
                 } label: {
                     ServiceSettingLabel(icon: "scope", bg: AppTheme.blueSoft, color: Color(hex: 0x4169E1), title: "Service Radius", value: "\(store.profile.serviceRadiusKm) km around \(store.profile.serviceArea)")
                 }
-                Divider().padding(.leading, 116)
+                Divider().padding(.leading, 82)
                 Menu {
                     ForEach(["Guwahati", "Dispur", "Ganeshguri", "Zoo Road", "Six Mile"], id: \.self) { area in
                         Button(area) { store.profile.serviceArea = area; store.persistProfile() }
@@ -335,7 +337,7 @@ struct MyServicesScreen: View {
                     ServiceSettingLabel(icon: "mappin.circle", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Service Area", value: "\(store.profile.serviceArea), Assam")
                 }
             }
-            .androidCard(cornerRadius: 28, padding: 24)
+            .androidCard(cornerRadius: 24, padding: 18)
             SecurityNoticeCard(title: "Better visibility, more bookings", subtitle: "Keeping your services and area updated helps us match you with the right customer.")
             Button("Save Changes") {
                 store.persistProfile()
@@ -354,12 +356,12 @@ struct PartnerSettingsScreen: View {
             ReferenceHeader(title: "Settings", subtitle: "Manage your notification and route preferences", backAction: { store.screen = .profile })
             VStack(spacing: 0) {
                 SettingPreferenceRow(icon: "bell", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Notifications", subtitle: "Manage your notification and route preferences", chip: "Enabled")
-                Divider().padding(.leading, 122)
+                Divider().padding(.leading, 76)
                 SettingPreferenceRow(icon: "bell.badge", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Booking Alerts", subtitle: "Get notified for new bookings and updates", chip: "Ring + Vibration")
-                Divider().padding(.leading, 122)
+                Divider().padding(.leading, 76)
                 SettingPreferenceRow(icon: "mappin.circle", bg: AppTheme.blueSoft, color: AppTheme.blue, title: "Map Mode", subtitle: "Choose how map should show your route", chip: "In-app live route")
             }
-            .androidCard(cornerRadius: 28, padding: 24)
+            .androidCard(cornerRadius: 24, padding: 18)
             HStack(spacing: 20) {
                 SoftIcon(systemImage: "shield.checkered", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
                 VStack(alignment: .leading, spacing: 4) {
@@ -581,15 +583,16 @@ private struct ReferencePage<Content: View>: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 22) {
+            VStack(spacing: 16) {
                 content
             }
-            .padding(.horizontal, 30)
-            .padding(.top, 18)
-            .padding(.bottom, 36)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(AppTheme.bg.ignoresSafeArea())
+        .dynamicTypeSize(.small ... .large)
     }
 }
 
@@ -620,26 +623,26 @@ private struct ReferenceHeader: View {
                 if let trailingSystemImage, let trailingAction {
                     PlainHeaderButton(systemImage: trailingSystemImage, action: trailingAction)
                 } else {
-                    Color.clear.frame(width: 64, height: 64)
+                    Color.clear.frame(width: 48, height: 48)
                 }
             }
             VStack(spacing: 4) {
                 Text(title)
-                    .font(.system(size: 33, weight: .black))
+                    .font(.system(size: 26, weight: .black))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 20))
+                        .font(.system(size: 15))
                         .foregroundStyle(AppTheme.muted)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                 }
             }
-            .padding(.horizontal, 74)
+            .padding(.horizontal, 56)
         }
-        .frame(minHeight: 74)
+        .frame(minHeight: 58)
     }
 }
 
@@ -650,11 +653,11 @@ private struct PlainHeaderButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(systemImage == "chevron.left" ? AppTheme.hotPink : AppTheme.ink)
-                .frame(width: 64, height: 64)
-                .background(systemImage == "chevron.left" ? Color.white : Color.clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: systemImage == "chevron.left" ? Color.black.opacity(0.10) : .clear, radius: 10, x: 0, y: 5)
+                .frame(width: 48, height: 48)
+                .background(systemImage == "chevron.left" ? Color.white : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: systemImage == "chevron.left" ? Color.black.opacity(0.10) : .clear, radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -664,31 +667,37 @@ private struct OnlineStatusCard: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 14) {
             ZStack {
                 Circle().fill(AppTheme.green.opacity(0.12))
-                Circle().stroke(AppTheme.green.opacity(0.16), lineWidth: 2).padding(12)
-                Circle().fill(Color(hex: 0x00C853)).frame(width: 28, height: 28)
+                Circle().stroke(AppTheme.green.opacity(0.16), lineWidth: 2).padding(9)
+                Circle().fill(Color(hex: 0x00C853)).frame(width: 20, height: 20)
             }
-            .frame(width: 90, height: 90)
+            .frame(width: 62, height: 62)
             VStack(alignment: .leading, spacing: 5) {
                 Text(store.profile.online ? "You are Online" : "You are Offline")
-                    .font(.system(size: 26, weight: .black))
+                    .font(.system(size: 20, weight: .black))
                     .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
                 Text(store.profile.online ? "Receiving requests now" : "Switch on to receive requests")
-                    .font(.system(size: 20))
+                    .font(.system(size: 15))
                     .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                 Text(store.profile.online ? "Switch off anytime" : "You can switch on anytime")
-                    .font(.system(size: 18))
+                    .font(.system(size: 14))
                     .foregroundStyle(AppTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             Spacer()
             Toggle("", isOn: Binding(get: { store.profile.online }, set: { _ in store.toggleOnline() }))
                 .labelsHidden()
                 .tint(Color(hex: 0x00C853))
-                .scaleEffect(1.2)
+                .scaleEffect(0.95)
         }
-        .androidCard(cornerRadius: 28, padding: 20)
+        .androidCard(cornerRadius: 24, padding: 16)
     }
 }
 
@@ -705,7 +714,7 @@ private struct HomeStatsStrip: View {
             StatDivider()
             HomeStat(icon: "star", tint: AppTheme.purple, bg: Color(hex: 0xF9E8FF), title: "Total Earnings", value: "Rs \(store.monthEarnings)", footer: "This Month")
         }
-        .androidCard(cornerRadius: 28, padding: 18)
+        .androidCard(cornerRadius: 24, padding: 12)
     }
 }
 
@@ -719,25 +728,25 @@ private struct HomeStat: View {
     var footerTint: Color = AppTheme.muted
 
     var body: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(tint)
-                .frame(width: 64, height: 64)
+                .frame(width: 42, height: 42)
                 .background(bg, in: Circle())
             Text(title)
-                .font(.system(size: 14, weight: .black))
+                .font(.system(size: 11, weight: .black))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.72)
             Text(value)
-                .font(.system(size: 28, weight: .black))
+                .font(.system(size: 19, weight: .black))
                 .foregroundStyle(tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.62)
             Text(footer)
-                .font(.system(size: 14))
+                .font(.system(size: 11))
                 .foregroundStyle(footerTint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -748,7 +757,7 @@ private struct HomeStat: View {
 
 private struct StatDivider: View {
     var body: some View {
-        Rectangle().fill(Color(hex: 0xF4DCE2)).frame(width: 1, height: 138)
+        Rectangle().fill(Color(hex: 0xF4DCE2)).frame(width: 1, height: 92)
     }
 }
 
@@ -760,11 +769,13 @@ private struct SectionTitleRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 28, weight: .black))
+                .font(.system(size: 23, weight: .black))
                 .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
             Spacer()
             Button(actionTitle, action: action)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppTheme.hotPink)
         }
         .padding(.horizontal, 4)
@@ -775,19 +786,20 @@ private struct VisibilityBanner: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 12) {
             Text(store.profile.online ? "ON" : "OFF")
-                .font(.system(size: 15, weight: .black))
+                .font(.system(size: 13, weight: .black))
                 .foregroundStyle(store.profile.online ? AppTheme.green : AppTheme.muted)
-                .frame(width: 82, height: 40)
+                .frame(width: 64, height: 34)
                 .background(store.profile.online ? AppTheme.greenSoft : Color(hex: 0xF3F3F3), in: Capsule())
             Text(statusText)
-                .font(.system(size: 17))
+                .font(.system(size: 14))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(2)
+                .safeText()
             Spacer()
         }
-        .androidCard(cornerRadius: 18, padding: 14)
+        .androidCard(cornerRadius: 16, padding: 12)
     }
 
     private var statusText: String {
@@ -804,25 +816,27 @@ private struct WaitingRequestCard: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        HStack(spacing: 20) {
-            ServiceBadge(title: store.profile.skillsLabel.isEmpty ? "Service" : store.profile.skillsLabel, size: 106)
+        HStack(spacing: 14) {
+            ServiceBadge(title: store.profile.skillsLabel.isEmpty ? "Service" : store.profile.skillsLabel, size: 74)
             VStack(alignment: .leading, spacing: 7) {
                 Text("Waiting for matching requests")
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 18, weight: .black))
                     .foregroundStyle(AppTheme.ink)
+                    .lineLimit(2)
+                    .safeText()
                 Text(store.profile.skillsLabel.isEmpty ? "Select services" : store.profile.skillsLabel)
-                    .font(.system(size: 20, weight: .black))
+                    .font(.system(size: 15, weight: .black))
                     .foregroundStyle(AppTheme.hotPink)
                     .lineLimit(2)
                     .safeText()
                 Text("Stay online to get matched with nearby customers.")
-                    .font(.system(size: 18))
+                    .font(.system(size: 14))
                     .foregroundStyle(AppTheme.muted)
                     .safeText()
             }
             Spacer()
         }
-        .androidCard(cornerRadius: 24, padding: 22)
+        .androidCard(cornerRadius: 22, padding: 16)
     }
 }
 
@@ -832,26 +846,28 @@ private struct HomeRequestCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 20) {
-                ServiceBadge(title: booking.serviceName, size: 106)
+            HStack(spacing: 14) {
+                ServiceBadge(title: booking.serviceName, size: 74)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(booking.serviceName)
-                        .font(.system(size: 24, weight: .black))
+                        .font(.system(size: 18, weight: .black))
                         .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
+                        .safeText()
                     Text(booking.issue)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppTheme.hotPink)
                         .lineLimit(2)
                         .safeText()
                     Text("\(booking.city) - \(booking.slot)")
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
                         .foregroundStyle(AppTheme.muted)
                         .lineLimit(2)
                 }
                 Spacer()
                 StatusPill(text: booking.statusLabel, tint: AppTheme.orange, background: AppTheme.orangeSoft)
             }
-            .androidCard(cornerRadius: 24, padding: 22)
+            .androidCard(cornerRadius: 22, padding: 16)
         }
         .buttonStyle(.plain)
     }
@@ -869,14 +885,16 @@ private struct BookingTabs: View {
                     Text(tab.title)
                         .font(.system(size: 17, weight: .black))
                         .foregroundStyle(selection == tab ? AppTheme.hotPink : AppTheme.ink)
-                        .frame(maxWidth: .infinity, minHeight: 72)
-                        .background(selection == tab ? AppTheme.roseSoft : .clear, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(selection == tab ? AppTheme.roseSoft : .clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(10)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .padding(8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 5)
     }
 }
@@ -887,21 +905,21 @@ private struct PremiumBookingCard: View {
     let detailsAction: () -> Void
 
     var body: some View {
-        VStack(spacing: 18) {
-            HStack(alignment: .top, spacing: 22) {
-                ServiceBadge(title: booking.serviceName, size: 138)
+        VStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                ServiceBadge(title: booking.serviceName, size: 86)
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("#\(booking.displayId)")
-                            .font(.system(size: 15, weight: .black))
+                            .font(.system(size: 13, weight: .black))
                             .foregroundStyle(AppTheme.roseDark)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.62)
                         Spacer()
                         StatusPill(text: booking.statusLabel == "Accepted" ? "Ongoing" : booking.statusLabel, tint: AppTheme.orange, background: AppTheme.orangeSoft)
                     }
                     Text(booking.serviceName)
-                        .font(.system(size: 27, weight: .black))
+                        .font(.system(size: 20, weight: .black))
                         .foregroundStyle(AppTheme.ink)
                         .lineLimit(2)
                         .safeText()
@@ -909,28 +927,32 @@ private struct PremiumBookingCard: View {
                     BookingMetaRow(mark: "T", value: booking.slot)
                     BookingMetaRow(mark: "L", value: booking.city)
                     Text("Note: \(booking.issue.isEmpty ? "Customer requested \(booking.serviceName)" : booking.issue)")
-                        .font(.system(size: 16))
+                        .font(.system(size: 14))
                         .foregroundStyle(AppTheme.roseDark)
                         .lineLimit(2)
                         .safeText()
                 }
             }
-            HStack(spacing: 22) {
+            HStack(spacing: 12) {
                 Button("Call", action: callAction)
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 17, weight: .black))
                     .foregroundStyle(AppTheme.hotPink)
-                    .frame(maxWidth: .infinity, minHeight: 70)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1.5))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1.5))
                 Button("View Details", action: detailsAction)
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 17, weight: .black))
                     .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 70)
-                    .background(LinearGradient(colors: [AppTheme.hotPink, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(LinearGradient(colors: [AppTheme.hotPink, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .shadow(color: AppTheme.hotPink.opacity(0.25), radius: 8, x: 0, y: 5)
             }
         }
-        .androidCard(cornerRadius: 26, padding: 22)
+        .androidCard(cornerRadius: 24, padding: 16)
     }
 }
 
@@ -939,13 +961,13 @@ private struct BookingMetaRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 12) {
             Text(mark)
-                .font(.system(size: 15, weight: .black))
+                .font(.system(size: 13, weight: .black))
                 .foregroundStyle(AppTheme.muted)
-                .frame(width: 20)
+                .frame(width: 16)
             Text(value)
-                .font(.system(size: 20))
+                .font(.system(size: 15))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -963,16 +985,16 @@ private struct EarningsTabs: View {
                     selection = item
                 } label: {
                     Text(item.title)
-                        .font(.system(size: 17, weight: .black))
+                        .font(.system(size: 15, weight: .black))
                         .foregroundStyle(selection == item ? .white : AppTheme.ink)
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                        .background(selection == item ? AppTheme.hotPink : .clear, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(selection == item ? AppTheme.hotPink : .clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(10)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 5)
     }
 }
@@ -982,40 +1004,44 @@ private struct EarningsHero: View {
     let period: EarningsPeriod
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Wallet - \(period.title)ly Earnings")
-                        .font(.system(size: 21, weight: .black))
+                        .font(.system(size: 17, weight: .black))
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text("Rs \(amount)")
-                        .font(.system(size: 50, weight: .black))
+                        .font(.system(size: 36, weight: .black))
                         .foregroundStyle(.white)
                     Text("\(jobs) completed jobs in this period")
-                        .font(.system(size: 18, weight: .black))
+                        .font(.system(size: 14, weight: .black))
                         .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(2)
+                        .safeText()
                 }
                 Spacer()
-                VStack(spacing: 18) {
+                VStack(spacing: 12) {
                     Image(systemName: "wallet.pass")
-                        .font(.system(size: 48, weight: .bold))
+                        .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 122, height: 118)
-                        .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .frame(width: 76, height: 72)
+                        .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     Button("View Wallet") {}
-                        .font(.system(size: 15, weight: .black))
+                        .font(.system(size: 12, weight: .black))
                         .foregroundStyle(.white)
-                        .frame(width: 128, height: 52)
+                        .frame(width: 92, height: 40)
                         .background(Color.white.opacity(0.08), in: Capsule())
                         .overlay(Capsule().stroke(Color.white.opacity(0.72), lineWidth: 1.5))
                 }
             }
             Sparkline()
-                .frame(height: 82)
+                .frame(height: 62)
                 .padding(.top, 4)
         }
-        .padding(26)
-        .background(LinearGradient(colors: [Color(hex: 0xD90069), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .padding(18)
+        .background(LinearGradient(colors: [Color(hex: 0xD90069), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 5)
     }
 
@@ -1069,23 +1095,25 @@ private struct EarningsBreakdownCard: View {
     let period: EarningsPeriod
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            HStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 12) {
                 SoftIcon(systemImage: "chart.bar", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
                 Text("Earnings Breakdown")
-                    .font(.system(size: 27, weight: .black))
+                    .font(.system(size: 22, weight: .black))
                     .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
             }
             BreakdownRow(icon: "calendar", bg: AppTheme.blueSoft, color: AppTheme.blue, title: "Completed Orders", value: "Rs \(store.totalEarnings)")
             BreakdownRow(icon: "star", bg: Color(hex: 0xFFFBE7), color: Color(hex: 0xDCA000), title: "Incentives", value: "Rs 0")
             BreakdownRow(icon: "wifi", bg: AppTheme.greenSoft, color: AppTheme.green, title: "Tips", value: "Rs 0")
             HStack {
-                Text("Total").font(.system(size: 24, weight: .black))
+                Text("Total").font(.system(size: 20, weight: .black))
                 Spacer()
-                Text("Rs \(store.totalEarnings)").font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.hotPink)
+                Text("Rs \(store.totalEarnings)").font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.hotPink)
             }
         }
-        .androidCard(cornerRadius: 28, padding: 24)
+        .androidCard(cornerRadius: 24, padding: 18)
     }
 }
 
@@ -1097,15 +1125,19 @@ private struct BreakdownRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 22) {
-            SoftIcon(systemImage: icon, color: color, bg: bg, size: 58, iconSize: 24)
+        HStack(spacing: 14) {
+            SoftIcon(systemImage: icon, color: color, bg: bg, size: 46, iconSize: 20)
             Text(title)
-                .font(.system(size: 21))
+                .font(.system(size: 16))
                 .foregroundStyle(AppTheme.ink)
+                .lineLimit(2)
+                .safeText()
             Spacer()
             Text(value)
-                .font(.system(size: 19, weight: .black))
+                .font(.system(size: 16, weight: .black))
                 .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
     }
 }
@@ -1114,15 +1146,15 @@ private struct TransactionsCard: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 30) {
-            HStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 12) {
                 SoftIcon(systemImage: "scope", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
                 Text("Transactions")
-                    .font(.system(size: 27, weight: .black))
+                    .font(.system(size: 22, weight: .black))
             }
             if store.completedBookings.isEmpty {
                 Text("No verified transaction yet. Completed jobs will appear here automatically.")
-                    .font(.system(size: 17))
+                    .font(.system(size: 15))
                     .foregroundStyle(AppTheme.muted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -1137,7 +1169,7 @@ private struct TransactionsCard: View {
                 }
             }
         }
-        .androidCard(cornerRadius: 28, padding: 24)
+        .androidCard(cornerRadius: 24, padding: 18)
     }
 }
 
@@ -1146,13 +1178,15 @@ private struct StatementCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 18) {
+            HStack(spacing: 12) {
                 SoftIcon(systemImage: "doc.text", color: Color(hex: 0x4169E1), bg: AppTheme.blueSoft)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Job Statement PDF")
-                        .font(.system(size: 27, weight: .black))
+                        .font(.system(size: 22, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                     Text("Download completed jobs, commission and payout summary.")
-                        .font(.system(size: 17))
+                        .font(.system(size: 15))
                         .foregroundStyle(AppTheme.muted)
                         .safeText()
                 }
@@ -1160,36 +1194,36 @@ private struct StatementCard: View {
             Button("Download Job Statement") { store.downloadStatement() }
                 .primaryButton()
         }
-        .androidCard(cornerRadius: 28, padding: 24)
+        .androidCard(cornerRadius: 24, padding: 18)
     }
 }
 
 private struct RewardsBanner: View {
     var body: some View {
-        HStack(spacing: 18) {
-            VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Keep up the great work!")
-                    .font(.system(size: 22, weight: .black))
+                    .font(.system(size: 19, weight: .black))
                     .foregroundStyle(AppTheme.roseDark)
                 Text("Complete more orders and earn exciting rewards.")
-                    .font(.system(size: 17))
+                    .font(.system(size: 15))
                     .foregroundStyle(AppTheme.ink)
                     .safeText()
                 Button("View Rewards") {}
-                    .font(.system(size: 16, weight: .black))
+                    .font(.system(size: 14, weight: .black))
                     .foregroundStyle(AppTheme.hotPink)
-                    .frame(width: 160, height: 52)
+                    .frame(width: 134, height: 44)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xF4B9BE), lineWidth: 1))
             }
             Spacer()
             Image(systemName: "gift.fill")
-                .font(.system(size: 74, weight: .bold))
+                .font(.system(size: 48, weight: .bold))
                 .foregroundStyle(AppTheme.hotPink)
-                .frame(width: 130, height: 120)
+                .frame(width: 78, height: 72)
         }
-        .androidCard(cornerRadius: 28, padding: 24)
-        .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .androidCard(cornerRadius: 24, padding: 18)
+        .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 
@@ -1197,28 +1231,28 @@ private struct ProfileSummaryCard: View {
     @EnvironmentObject private var store: PartnerAppStore
 
     var body: some View {
-        VStack(spacing: 30) {
-            HStack(spacing: 28) {
+        VStack(spacing: 22) {
+            HStack(spacing: 16) {
                 Circle()
                     .fill(LinearGradient(colors: [Color(hex: 0xD90069), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 150, height: 150)
+                    .frame(width: 92, height: 92)
                     .shadow(color: AppTheme.hotPink.opacity(0.25), radius: 8, x: 0, y: 4)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(store.partnerDisplayName)
-                        .font(.system(size: 34, weight: .black))
+                        .font(.system(size: 24, weight: .black))
                         .foregroundStyle(AppTheme.ink)
                         .lineLimit(2)
                         .minimumScaleFactor(0.72)
                     Text("Star 4.7 (4 reviews)")
-                        .font(.system(size: 19))
+                        .font(.system(size: 15))
                     Text("ID: \(store.partnerCode)")
-                        .font(.system(size: 19))
+                        .font(.system(size: 15))
                         .foregroundStyle(AppTheme.muted)
                     Text("OK  Verified Partner")
-                        .font(.system(size: 18, weight: .black))
+                        .font(.system(size: 14, weight: .black))
                         .foregroundStyle(AppTheme.green)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
                         .background(AppTheme.greenSoft, in: Capsule())
                 }
                 Spacer()
@@ -1230,7 +1264,7 @@ private struct ProfileSummaryCard: View {
                 ProfileMetric(icon: "briefcase", tint: AppTheme.hotPink, bg: AppTheme.roseSoft, value: "\(store.activeBookings.count)", label: "Active Jobs")
             }
         }
-        .androidCard(cornerRadius: 28, padding: 28)
+        .androidCard(cornerRadius: 24, padding: 18)
     }
 }
 
@@ -1242,13 +1276,14 @@ private struct ProfileMetric: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
-                .frame(width: 48, height: 48)
+                .font(.system(size: 17, weight: .bold))
+                .frame(width: 38, height: 38)
                 .background(bg, in: Circle())
-            Text(value).font(.system(size: 25, weight: .black))
-            Text(label).font(.system(size: 15)).foregroundStyle(AppTheme.muted).multilineTextAlignment(.center)
+            Text(value).font(.system(size: 19, weight: .black)).lineLimit(1).minimumScaleFactor(0.75)
+            Text(label).font(.system(size: 12)).foregroundStyle(AppTheme.muted).multilineTextAlignment(.center).lineLimit(2)
         }
         .frame(maxWidth: .infinity)
     }
@@ -1263,16 +1298,16 @@ private struct ProfileActionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 26) {
-                SoftIcon(systemImage: icon, color: icon == "circle.fill" ? AppTheme.orange : AppTheme.hotPink, bg: color, size: 96, iconSize: 38)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text(subtitle).font(.system(size: 19)).foregroundStyle(AppTheme.muted).safeText()
+            HStack(spacing: 16) {
+                SoftIcon(systemImage: icon, color: icon == "circle.fill" ? AppTheme.orange : AppTheme.hotPink, bg: color, size: 58, iconSize: 24)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
+                    Text(subtitle).font(.system(size: 14)).foregroundStyle(AppTheme.muted).safeText()
                 }
                 Spacer()
             }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
     }
@@ -1284,15 +1319,15 @@ private struct ProfileInfoRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 14) {
             SoftIcon(systemImage: icon, color: AppTheme.hotPink, bg: AppTheme.roseSoft)
             VStack(alignment: .leading, spacing: 5) {
-                Text(label).font(.system(size: 18)).foregroundStyle(AppTheme.muted)
-                Text(value).font(.system(size: 22, weight: .black)).foregroundStyle(AppTheme.ink)
+                Text(label).font(.system(size: 15)).foregroundStyle(AppTheme.muted)
+                Text(value).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(2).safeText()
             }
             Spacer()
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 }
 
@@ -1301,15 +1336,15 @@ private struct SecurityNoticeCard: View {
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: 14) {
             SoftIcon(systemImage: "shield.checkered", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.system(size: 21, weight: .black)).foregroundStyle(AppTheme.ink)
-                Text(subtitle).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+                Text(title).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink)
+                Text(subtitle).font(.system(size: 14)).foregroundStyle(AppTheme.muted).safeText()
             }
             Spacer()
         }
-        .androidCard(cornerRadius: 24, padding: 20)
+        .androidCard(cornerRadius: 22, padding: 16)
     }
 }
 
@@ -1320,16 +1355,16 @@ private struct DocumentUploadRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 18) {
+            HStack(spacing: 14) {
                 SoftIcon(systemImage: status == "Uploaded" ? "checkmark.seal" : "doc", color: status == "Uploaded" ? AppTheme.green : AppTheme.hotPink, bg: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.roseSoft)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text("JPG, PNG or PDF under 5 MB").font(.system(size: 15)).foregroundStyle(AppTheme.muted)
+                    Text(title).font(.system(size: 17, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
+                    Text("JPG, PNG or PDF under 5 MB").font(.system(size: 13)).foregroundStyle(AppTheme.muted)
                 }
                 Spacer()
                 StatusPill(text: status, tint: status == "Uploaded" ? AppTheme.green : AppTheme.orange, background: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.orangeSoft)
             }
-            .androidCard(cornerRadius: 24, padding: 18)
+            .androidCard(cornerRadius: 22, padding: 14)
         }
         .buttonStyle(.plain)
     }
@@ -1348,7 +1383,7 @@ private struct ServiceSettingRow: View {
             ServiceSettingLabel(icon: icon, bg: bg, color: color, title: title, value: value)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 18)
+        .padding(.vertical, 10)
     }
 }
 
@@ -1360,20 +1395,20 @@ private struct ServiceSettingLabel: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 14) {
             SoftIcon(systemImage: icon, color: color, bg: bg)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.system(size: 17)).foregroundStyle(AppTheme.muted)
-                Text(value).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(2).safeText()
+                Text(value).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(2).safeText()
             }
             Spacer()
             Text("Edit")
-                .font(.system(size: 16, weight: .black))
+                .font(.system(size: 14, weight: .black))
                 .foregroundStyle(AppTheme.hotPink)
-                .frame(width: 114, height: 58)
+                .frame(width: 82, height: 44)
                 .background(AppTheme.roseSoft, in: Capsule())
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
     }
 }
 
@@ -1386,21 +1421,23 @@ private struct SettingPreferenceRow: View {
     let chip: String
 
     var body: some View {
-        HStack(spacing: 24) {
-            SoftIcon(systemImage: icon, color: color, bg: bg, size: 96, iconSize: 42)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
-                Text(subtitle).font(.system(size: 20)).foregroundStyle(AppTheme.muted).safeText()
+        HStack(spacing: 14) {
+            SoftIcon(systemImage: icon, color: color, bg: bg, size: 58, iconSize: 24)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
+                Text(subtitle).font(.system(size: 15)).foregroundStyle(AppTheme.muted).safeText()
             }
             Spacer()
             Text(chip)
-                .font(.system(size: 13, weight: .black))
+                .font(.system(size: 11, weight: .black))
                 .foregroundStyle(color)
-                .padding(.horizontal, 18)
-                .frame(height: 48)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+                .padding(.horizontal, 12)
+                .frame(height: 38)
                 .background(bg, in: Capsule())
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, 14)
     }
 }
 
@@ -1414,15 +1451,15 @@ private struct SupportOptionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 26) {
-                SoftIcon(systemImage: icon, color: color, bg: bg, size: 86, iconSize: 36)
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(title).font(.system(size: 22, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text(subtitle).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+            HStack(spacing: 16) {
+                SoftIcon(systemImage: icon, color: color, bg: bg, size: 58, iconSize: 24)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.system(size: 18, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
+                    Text(subtitle).font(.system(size: 14)).foregroundStyle(AppTheme.muted).safeText()
                 }
                 Spacer()
             }
-            .padding(.vertical, 18)
+            .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
     }
@@ -1434,8 +1471,8 @@ private struct LegalCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 24, weight: .black)).foregroundStyle(AppTheme.ink)
-            Text(detail).font(.system(size: 18)).foregroundStyle(AppTheme.muted).safeText()
+            Text(title).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink)
+            Text(detail).font(.system(size: 15)).foregroundStyle(AppTheme.muted).safeText()
         }
         .androidCard(cornerRadius: 24)
     }
@@ -1450,16 +1487,16 @@ private struct NotificationRowView: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 18) {
+            HStack(spacing: 14) {
                 SoftIcon(systemImage: icon, color: AppTheme.hotPink, bg: AppTheme.roseSoft)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.system(size: 20, weight: .black)).foregroundStyle(AppTheme.ink)
-                    Text(detail).font(.system(size: 16)).foregroundStyle(AppTheme.muted).safeText()
+                    Text(title).font(.system(size: 17, weight: .black)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
+                    Text(detail).font(.system(size: 14)).foregroundStyle(AppTheme.muted).safeText()
                 }
                 Spacer()
                 if unread { Circle().fill(AppTheme.hotPink).frame(width: 10, height: 10) }
             }
-            .androidCard(cornerRadius: 24, padding: 18)
+            .androidCard(cornerRadius: 22, padding: 14)
         }
         .buttonStyle(.plain)
     }
@@ -1469,9 +1506,9 @@ private struct ServiceTimelineCard: View {
     let booking: PartnerBooking
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Service Status")
-                .font(.system(size: 24, weight: .black))
+                .font(.system(size: 20, weight: .black))
             ForEach(StatusStep.timeline, id: \.status) { step in
                 HStack(spacing: 14) {
                     Image(systemName: booking.statusRank >= step.rank ? "checkmark.circle.fill" : "circle")
@@ -1492,8 +1529,8 @@ private struct SoftIcon: View {
     let systemImage: String
     let color: Color
     let bg: Color
-    var size: CGFloat = 70
-    var iconSize: CGFloat = 30
+    var size: CGFloat = 54
+    var iconSize: CGFloat = 23
 
     var body: some View {
         Image(systemName: systemImage)

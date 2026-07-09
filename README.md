@@ -24,6 +24,7 @@ Open `ApnaServoPartnerIOS.xcodeproj` on macOS in Xcode, select the `ApnaServoPar
 
 - Add `GoogleService-Info.plist` before enabling Firebase Auth/Messaging.
 - Add Firebase iOS packages if push notifications and automatic Firebase ID tokens are required.
+- Paste and save a Firebase ID token on login/register until automatic Firebase sign-in is wired.
 - Enable APNs/push notification capability for production booking alerts.
 - Set the signing team on the `ApnaServoPartnerIOS` target.
 - Backend base URL is in `ApnaServoPartnerIOS/App/AppConfig.swift`.

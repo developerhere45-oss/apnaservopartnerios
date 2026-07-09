@@ -134,6 +134,7 @@ struct PartnerLoginView: View {
                 authInput("Email address", text: $store.profile.email, icon: "envelope.fill", keyboard: .emailAddress)
                 authInput("Service Area / Work", text: $store.profile.workingAreas, icon: "mappin.and.ellipse")
                 SkillPickerGrid()
+                backendSessionInput
                 Button(buttonTitle) {
                     store.completeLogin()
                 }
@@ -192,6 +193,7 @@ struct PartnerLoginView: View {
                 documentSelectionCards
 
                 SkillPickerGrid()
+                backendSessionInput
 
                 Button("Register    >") {
                     if store.profile.address.isEmpty {
@@ -263,6 +265,42 @@ struct PartnerLoginView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(AppTheme.line, lineWidth: 1)
         )
+    }
+
+    private var backendSessionInput: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Secure Backend Session")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(AppTheme.ink)
+            HStack(spacing: 10) {
+                Text("KEY")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(AppTheme.hotPink)
+                    .frame(width: 34, height: 34)
+                    .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                SecureField("Firebase ID token", text: $store.authToken)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Button("Save") {
+                    store.saveAuthToken()
+                }
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(AppTheme.hotPink)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 54)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppTheme.line, lineWidth: 1)
+            )
+            Text("Backend bookings, notifications, documents and earnings use this secure token.")
+                .font(.system(size: 11))
+                .foregroundStyle(AppTheme.muted)
+                .safeText()
+        }
     }
 
     private var genderPicker: some View {

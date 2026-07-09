@@ -43,7 +43,8 @@ final class PartnerAppStore: ObservableObject {
         notificationService.configure()
     }
 
-    var loggedIn: Bool { profile.isValid }
+    var hasBackendSession: Bool { !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var loggedIn: Bool { profile.isValid && hasBackendSession }
     var pendingBookings: [PartnerBooking] { bookings.filter(\.isPending) }
     var activeBookings: [PartnerBooking] { bookings.filter(\.isActive) }
     var completedBookings: [PartnerBooking] { bookings.filter { $0.status == "completed" } }
@@ -63,22 +64,22 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func loadLocalState() {
+        authToken = secureStore.string(for: tokenKey)
         if let data = defaults.data(forKey: profileKey),
            let saved = try? JSONDecoder().decode(PartnerProfile.self, from: data) {
             profile = saved
-            screen = saved.isValid ? .dashboard : .login
+            screen = saved.isValid && hasBackendSession ? .dashboard : .login
         }
         if let data = defaults.data(forKey: bookingsKey),
            let saved = try? JSONDecoder().decode([PartnerBooking].self, from: data) {
             bookings = saved
             notifiedPendingBookingIds = Set(saved.filter(\.isPending).map(\.id))
         }
-        authToken = secureStore.string(for: tokenKey)
         fcmToken = defaults.string(forKey: "partner_fcm_token") ?? ""
         supportMessages = [
             ChatMessage(id: "support-welcome", bookingId: "support", bookingCode: "", senderRole: "support", senderName: "Partner Support", message: "Welcome to partner support. How can we help?", clientMessageId: "", deliveryStatus: "sent", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000))
         ]
-        if profile.isValid {
+        if loggedIn {
             startRealtimePolling()
             startLocationHeartbeat()
         }
@@ -97,7 +98,12 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func saveAuthToken() {
-        secureStore.set(authToken.trimmingCharacters(in: .whitespacesAndNewlines), for: tokenKey)
+        authToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !authToken.isEmpty else {
+            errorMessage = "Firebase ID token blank hai. Valid backend token paste karo."
+            return
+        }
+        secureStore.set(authToken, for: tokenKey)
         infoMessage = "Backend token saved."
     }
 
@@ -106,6 +112,14 @@ final class PartnerAppStore: ObservableObject {
             errorMessage = "Name, 10 digit phone, aur at least one service required hai."
             return
         }
+        let cleanToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanToken.isEmpty else {
+            errorMessage = "Backend session required hai. Firebase ID token paste/save karo, phir login/register karo."
+            screen = .login
+            return
+        }
+        authToken = cleanToken
+        secureStore.set(cleanToken, for: tokenKey)
         persistProfile()
         screen = .dashboard
         Task {
