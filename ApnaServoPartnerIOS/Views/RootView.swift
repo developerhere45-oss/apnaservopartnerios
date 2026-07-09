@@ -101,6 +101,13 @@ struct PartnerLoginView: View {
                     }
                     .outlineButton()
 
+                    #if DEBUG
+                    Button("Skip to Home Screen") {
+                        store.skipFirebaseForHomePreview()
+                    }
+                    .outlineButton()
+                    #endif
+
                     Text("v1.0.0")
                         .font(.system(size: 12))
                         .foregroundStyle(AppTheme.muted)
@@ -150,6 +157,13 @@ struct PartnerLoginView: View {
                 mode = .landing
             }
             .outlineButton()
+
+            #if DEBUG
+            Button("Skip to Home Screen") {
+                store.skipFirebaseForHomePreview()
+            }
+            .outlineButton()
+            #endif
         }
     }
 
@@ -217,6 +231,13 @@ struct PartnerLoginView: View {
                 mode = .login
             }
             .outlineButton()
+
+            #if DEBUG
+            Button("Skip to Home Screen") {
+                store.skipFirebaseForHomePreview()
+            }
+            .outlineButton()
+            #endif
         }
     }
 

@@ -26,6 +26,7 @@ final class PartnerAppStore: ObservableObject {
     @Published var lastRealtimeSyncAt: Date?
     @Published var phoneVerificationSent = false
     @Published var phoneOTP = ""
+    @Published var previewMode = false
 
     private let api = APIClient()
     private let secureStore = SecureStore()
@@ -63,7 +64,7 @@ final class PartnerAppStore: ObservableObject {
     }
 
     var hasBackendSession: Bool { !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var loggedIn: Bool { profile.isValid && hasBackendSession }
+    var loggedIn: Bool { profile.isValid && (hasBackendSession || previewMode) }
     var pendingBookings: [PartnerBooking] { bookings.filter(\.isPending) }
     var activeBookings: [PartnerBooking] { bookings.filter(\.isActive) }
     var completedBookings: [PartnerBooking] { bookings.filter { $0.status == "completed" } }
@@ -170,12 +171,117 @@ final class PartnerAppStore: ObservableObject {
         Task { await completeLoginWithFirebase() }
     }
 
+    #if DEBUG
+    func skipFirebaseForHomePreview() {
+        refreshTask?.cancel()
+        heartbeatTask?.cancel()
+        previewMode = true
+        authToken = ""
+        phoneVerificationSent = false
+        phoneVerificationID = ""
+        phoneOTP = ""
+        profile = PartnerProfile(
+            name: profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Bittu Mallah" : profile.name,
+            phone: profile.phone.filter(\.isNumber).count == 10 ? profile.phone : "6901331470",
+            email: profile.email.isEmpty ? "partner@apnaservo.com" : profile.email,
+            dob: profile.dob,
+            gender: profile.gender.isEmpty ? "Male" : profile.gender,
+            address: profile.address.isEmpty ? "Guwahati, Assam" : profile.address,
+            city: profile.city,
+            state: profile.state,
+            pinCode: profile.pinCode.isEmpty ? "781001" : profile.pinCode,
+            emergencyContactNumber: profile.emergencyContactNumber.isEmpty ? "6901331470" : profile.emergencyContactNumber,
+            yearsOfExperience: max(profile.yearsOfExperience, 4),
+            workingAreas: profile.workingAreas.isEmpty ? "Guwahati, Assam" : profile.workingAreas,
+            languages: profile.languages.isEmpty ? "Hindi, Assamese, English" : profile.languages,
+            photoURL: profile.photoURL,
+            faceVerified: true,
+            online: true,
+            skills: profile.skills.isEmpty ? [.ac, .plumbing] : profile.skills,
+            serviceRadiusKm: max(profile.serviceRadiusKm, 25),
+            serviceArea: profile.serviceArea,
+            lat: profile.lat,
+            lng: profile.lng
+        )
+        seedPreviewBookings()
+        realtimeConnected = true
+        lastRealtimeSyncAt = Date()
+        screen = .dashboard
+        infoMessage = "Preview mode: Firebase/backend skipped for UI check."
+    }
+
+    private func seedPreviewBookings() {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        bookings = [
+            PartnerBooking(
+                id: "preview-active-1",
+                bookingCode: "6a4f150cd26df1b21984646f",
+                serviceName: "AC Repair & Service",
+                issue: "iOS preview booking",
+                customerName: "Rahul Sharma",
+                customerPhone: "9876543210",
+                address: "Ganeshguri, Guwahati",
+                city: "Guwahati",
+                slot: "Today, 10:00 AM - 12:00 PM",
+                defaultAmount: 599,
+                finalAmount: 0,
+                status: "accepted",
+                createdAtMillis: now - 3_600_000
+            ),
+            PartnerBooking(
+                id: "preview-pending-1",
+                bookingCode: "6a47419356353110db7649c8",
+                serviceName: "Plumber",
+                issue: "Tap leakage repair",
+                customerName: "Ananya Das",
+                customerPhone: "9876501234",
+                address: "Zoo Road, Guwahati",
+                city: "Guwahati",
+                slot: "Today, 02:00 PM - 04:00 PM",
+                defaultAmount: 399,
+                finalAmount: 0,
+                status: "pending",
+                createdAtMillis: now - 1_800_000
+            ),
+            PartnerBooking(
+                id: "preview-completed-1",
+                bookingCode: "6a4707256353110db7627d8",
+                serviceName: "AC Repair & Service",
+                issue: "Cooling issue fixed",
+                customerName: "Pooja Saikia",
+                customerPhone: "9876512345",
+                address: "Six Mile, Guwahati",
+                city: "Guwahati",
+                slot: "Yesterday, 11:00 AM - 01:00 PM",
+                defaultAmount: 0,
+                finalAmount: 899,
+                status: "completed",
+                createdAtMillis: now - 86_400_000,
+                completedAtMillis: now - 80_000_000
+            )
+        ]
+        notifications = [
+            PartnerNotificationItem(
+                id: "preview-notification-1",
+                title: "New request available",
+                body: "Plumber | Today, 02:00 PM - 04:00 PM",
+                type: "booking_request",
+                bookingId: "preview-pending-1",
+                isRead: false
+            )
+        ]
+        notifiedPendingBookingIds = Set(bookings.filter(\.isPending).map(\.id))
+    }
+    #endif
+
     func restoreFirebaseSession() async {
-        guard profile.isValid, !hasBackendSession else { return }
+        guard !previewMode, profile.isValid, !hasBackendSession else { return }
         do {
             guard let token = try await firebaseAuth.currentIDToken(forceRefresh: false) else { return }
+            guard !previewMode else { return }
             await finishAuthenticatedLogin(token: token, requestNotifications: false)
         } catch {
+            guard !previewMode else { return }
             authToken = ""
             secureStore.set("", for: tokenKey)
             screen = .login
@@ -245,6 +351,7 @@ final class PartnerAppStore: ObservableObject {
         phoneVerificationSent = false
         phoneVerificationID = ""
         phoneOTP = ""
+        previewMode = false
         firebaseAuth.signOut()
         secureStore.set("", for: tokenKey)
         defaults.removeObject(forKey: profileKey)
@@ -254,6 +361,7 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func syncPartnerProfile() async {
+        guard !previewMode else { return }
         guard profile.isValid else { return }
         do {
             let token = try await usableAuthToken()
@@ -264,6 +372,7 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func saveFCMTokenIfNeeded() async {
+        guard !previewMode else { return }
         if fcmToken.isEmpty {
             fcmToken = await notificationService.refreshFCMToken()
             defaults.set(fcmToken, forKey: "partner_fcm_token")
@@ -278,6 +387,7 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func fetchRemoteProfile() async {
+        guard !previewMode else { return }
         do {
             let token = try await usableAuthToken()
             profile = try await api.fetchPartnerProfile(current: profile, token: token)
@@ -290,6 +400,7 @@ final class PartnerAppStore: ObservableObject {
     func toggleOnline() {
         profile.online.toggle()
         persistProfile()
+        guard !previewMode else { return }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -302,6 +413,10 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func refreshAll(silent: Bool = false) async {
+        guard !previewMode else {
+            realtimeConnected = true
+            return
+        }
         guard await refreshBackendToken() else {
             realtimeConnected = false
             return
@@ -377,6 +492,15 @@ final class PartnerAppStore: ObservableObject {
 
     func acceptSelectedBooking() {
         guard let booking = selectedBooking else { return }
+        if previewMode {
+            var accepted = booking
+            accepted.status = "accepted"
+            upsertBooking(accepted)
+            selectedBooking = accepted
+            screen = .detail
+            infoMessage = "Preview booking accepted."
+            return
+        }
         loading = true
         Task {
             do {
@@ -395,6 +519,15 @@ final class PartnerAppStore: ObservableObject {
 
     func rejectSelectedBooking() {
         guard let booking = selectedBooking else { return }
+        if previewMode {
+            var rejected = booking
+            rejected.status = "rejected"
+            upsertBooking(rejected)
+            selectedBooking = nil
+            screen = .dashboard
+            infoMessage = "Preview booking rejected."
+            return
+        }
         loading = true
         Task {
             do {
@@ -415,6 +548,17 @@ final class PartnerAppStore: ObservableObject {
 
     func updateSelectedStatus(_ status: String) {
         guard var booking = selectedBooking else { return }
+        if previewMode {
+            booking.status = status
+            if status == "completed" {
+                booking.finalAmount = booking.amount == 0 ? 599 : booking.amount
+                booking.completedAtMillis = Int64(Date().timeIntervalSince1970 * 1000)
+                screen = .bookings
+            }
+            upsertBooking(booking)
+            selectedBooking = booking
+            return
+        }
         loading = true
         Task {
             let location = await makeLocationPayload(bookingId: booking.id)
@@ -436,6 +580,10 @@ final class PartnerAppStore: ObservableObject {
 
     func reportNoResponse(reason: String) {
         guard let booking = selectedBooking else { return }
+        if previewMode {
+            infoMessage = "Preview no-response report saved for \(booking.displayId)."
+            return
+        }
         Task {
             let location = await makeLocationPayload(bookingId: booking.id)
             do {
@@ -479,6 +627,12 @@ final class PartnerAppStore: ObservableObject {
 
     func loadBookingChat() async {
         guard let booking = selectedBooking else { return }
+        if previewMode {
+            messages = [
+                ChatMessage(id: "preview-chat-1", bookingId: booking.id, bookingCode: booking.bookingCode, senderRole: "customer", senderName: booking.customerName, message: "Please come on time.", clientMessageId: "", deliveryStatus: "sent", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000) - 60_000)
+            ]
+            return
+        }
         do {
             let token = try await usableAuthToken()
             messages = try await api.fetchBookingChatMessages(bookingId: booking.id, token: token)
@@ -493,6 +647,12 @@ final class PartnerAppStore: ObservableObject {
         guard let booking = selectedBooking, !clean.isEmpty else { return }
         let local = ChatMessage.local(text: clean, booking: booking)
         messages.append(local)
+        if previewMode {
+            if let index = messages.firstIndex(where: { $0.id == local.id }) {
+                messages[index].deliveryStatus = "sent"
+            }
+            return
+        }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -524,6 +684,13 @@ final class PartnerAppStore: ObservableObject {
         let clientMessageId = "IOSSUPPORT\(Int(Date().timeIntervalSince1970 * 1000))"
         let local = ChatMessage(id: clientMessageId, bookingId: "support", bookingCode: "", senderRole: "partner", senderName: "You", message: clean, clientMessageId: clientMessageId, deliveryStatus: "queued", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000))
         supportMessages.append(local)
+        if previewMode {
+            if let index = supportMessages.firstIndex(where: { $0.id == clientMessageId }) {
+                supportMessages[index].deliveryStatus = "sent"
+            }
+            infoMessage = "Preview support request saved."
+            return
+        }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -546,6 +713,12 @@ final class PartnerAppStore: ObservableObject {
             errorMessage = "Enter the last 4 digits of Aadhaar."
             return
         }
+        if previewMode {
+            profile.faceVerified = true
+            persistProfile()
+            infoMessage = "Preview verification submitted."
+            return
+        }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -559,6 +732,11 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func uploadDocument(documentType: String, fileURL: URL) {
+        if previewMode {
+            documentStatuses[documentType] = "Uploaded"
+            infoMessage = "\(documentType) marked uploaded in preview."
+            return
+        }
         Task {
             let scoped = fileURL.startAccessingSecurityScopedResource()
             defer {
@@ -591,6 +769,11 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func requestAccountDeletion(reason: String = "Partner requested account deletion from iOS app") {
+        if previewMode {
+            logout()
+            infoMessage = "Preview account cleared."
+            return
+        }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -604,6 +787,10 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func downloadStatement() {
+        if previewMode {
+            infoMessage = "Preview statement ready after Firebase/backend setup."
+            return
+        }
         Task {
             do {
                 let token = try await usableAuthToken()
@@ -639,6 +826,7 @@ final class PartnerAppStore: ObservableObject {
     }
 
     func sendLocationHeartbeat() async {
+        guard !previewMode else { return }
         guard profile.online else { return }
         let payload = await makeLocationPayload(bookingId: activeBookings.first?.id ?? "")
         do {
