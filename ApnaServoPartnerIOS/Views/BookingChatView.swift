@@ -9,7 +9,7 @@ struct BookingChatView: View {
             TopBar(
                 title: store.selectedBooking?.customerName ?? "Customer Chat",
                 subtitle: store.selectedBooking?.displayId ?? "",
-                backAction: { store.screen = .detail },
+                backAction: { store.goBack(fallback: .detail) },
                 trailingSystemImage: "arrow.clockwise"
             ) {
                 Task { await store.loadBookingChat() }

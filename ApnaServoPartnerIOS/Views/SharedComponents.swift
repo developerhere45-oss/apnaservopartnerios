@@ -490,7 +490,7 @@ struct PartnerBottomNav: View {
 
     private func nav(_ title: String, _ image: String, _ screen: PartnerScreen) -> some View {
         Button {
-            store.screen = screen
+            store.navigate(to: screen, resetStack: true)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: image)

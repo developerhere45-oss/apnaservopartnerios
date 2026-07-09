@@ -57,13 +57,13 @@ struct DashboardScreen: View {
     var body: some View {
         ReferencePage {
             HStack(spacing: 10) {
-                PlainHeaderButton(systemImage: "line.3.horizontal") { store.screen = .profile }
+                PlainHeaderButton(systemImage: "line.3.horizontal") { store.navigate(to: .profile) }
                 Spacer()
                 AndroidAssetImage(name: "apna_servo_logo")
                     .frame(width: 148, height: 50)
                 Spacer()
                 PlainHeaderButton(systemImage: "qrcode.viewfinder") { store.infoMessage = "Partner ID QR opens after backend identity card endpoint is enabled." }
-                PlainHeaderButton(systemImage: "bell") { store.screen = .notifications }
+                PlainHeaderButton(systemImage: "bell") { store.navigate(to: .notifications) }
                     .overlay(alignment: .topTrailing) {
                         if store.pendingBookings.count + store.notifications.filter({ !$0.isRead }).count > 0 {
                             Circle().fill(AppTheme.hotPink).frame(width: 10, height: 10).offset(x: -7, y: 4)
@@ -72,7 +72,7 @@ struct DashboardScreen: View {
             }
             OnlineStatusCard()
             HomeStatsStrip()
-            SectionTitleRow(title: "Recent Requests", actionTitle: "View all") { store.screen = .bookings }
+            SectionTitleRow(title: "Recent Requests", actionTitle: "View all") { store.navigate(to: .bookings) }
             VisibilityBanner()
             if store.pendingBookings.isEmpty {
                 WaitingRequestCard()
@@ -91,7 +91,7 @@ struct PartnerBookingsScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "My Bookings", subtitle: "Manage and track your all bookings", backAction: { store.screen = .dashboard })
+            ReferenceHeader(title: "My Bookings", subtitle: "Manage and track your all bookings", backAction: { store.goBack(fallback: .dashboard) })
             BookingTabs(selection: $filter)
             SectionTitleRow(title: "Upcoming & Ongoing", actionTitle: "View All") { filter = .all }
             if filteredBookings.isEmpty {
@@ -124,8 +124,8 @@ struct EarningsScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Earnings", subtitle: "Track your income", backAction: { store.screen = .dashboard }, trailingSystemImage: "bell") {
-                store.screen = .notifications
+            ReferenceHeader(title: "Earnings", subtitle: "Track your income", backAction: { store.goBack(fallback: .dashboard) }, trailingSystemImage: "bell") {
+                store.navigate(to: .notifications)
             }
             EarningsTabs(selection: $period)
             EarningsHero(period: period)
@@ -149,13 +149,13 @@ struct PartnerProfileScreen: View {
                     .frame(maxWidth: .infinity)
             }
             ProfileSummaryCard()
-            ProfileActionRow(color: Color(hex: 0xDDF8FF), icon: "person", title: "Personal Information", subtitle: "View and update your personal details") { store.screen = .personalInfo }
-            ProfileActionRow(color: Color(hex: 0xEEF0FF), icon: "text.bubble", title: "Documents", subtitle: "Manage your documents and verification") { store.screen = .documents }
-            ProfileActionRow(color: AppTheme.roseSoft, icon: "headphones", title: "Support", subtitle: "Help center and support requests") { store.screen = .support }
-            ProfileActionRow(color: AppTheme.roseSoft, icon: "shield.checkered", title: "Legal & Information", subtitle: "Privacy, terms and account deletion") { store.screen = .legal }
-            ProfileActionRow(color: AppTheme.greenSoft, icon: "wallet.pass", title: "Earnings", subtitle: "View earnings, history and transactions") { store.screen = .earnings }
-            ProfileActionRow(color: AppTheme.orangeSoft, icon: "circle.fill", title: "My Services", subtitle: "Manage services and request matching") { store.screen = .myServices }
-            ProfileActionRow(color: Color(hex: 0xF3E9FF), icon: "slider.horizontal.3", title: "Settings", subtitle: "Preferences and account setup") { store.screen = .settings }
+            ProfileActionRow(color: Color(hex: 0xDDF8FF), icon: "person", title: "Personal Information", subtitle: "View and update your personal details") { store.navigate(to: .personalInfo) }
+            ProfileActionRow(color: Color(hex: 0xEEF0FF), icon: "text.bubble", title: "Documents", subtitle: "Manage your documents and verification") { store.navigate(to: .documents) }
+            ProfileActionRow(color: AppTheme.roseSoft, icon: "headphones", title: "Support", subtitle: "Help center and support requests") { store.navigate(to: .support) }
+            ProfileActionRow(color: AppTheme.roseSoft, icon: "shield.checkered", title: "Legal & Information", subtitle: "Privacy, terms and account deletion") { store.navigate(to: .legal) }
+            ProfileActionRow(color: AppTheme.greenSoft, icon: "wallet.pass", title: "Earnings", subtitle: "View earnings, history and transactions") { store.navigate(to: .earnings) }
+            ProfileActionRow(color: AppTheme.orangeSoft, icon: "circle.fill", title: "My Services", subtitle: "Manage services and request matching") { store.navigate(to: .myServices) }
+            ProfileActionRow(color: Color(hex: 0xF3E9FF), icon: "slider.horizontal.3", title: "Settings", subtitle: "Preferences and account setup") { store.navigate(to: .settings) }
             Button("Logout") { store.logout() }
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AppTheme.hotPink)
@@ -173,7 +173,7 @@ struct PersonalInfoScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Personal Information", subtitle: "", backAction: { store.screen = .profile }, trailingSystemImage: "pencil") {
+            ReferenceHeader(title: "Personal Information", subtitle: "", backAction: { store.goBack(fallback: .profile) }, trailingSystemImage: "pencil") {
                 store.infoMessage = "Edit fields from registration/profile sync flow. Backend profile update is enabled."
             }
             VStack(spacing: 18) {
@@ -237,7 +237,7 @@ struct DocumentsScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Documents", subtitle: "Manage your documents and verification", backAction: { store.screen = .profile })
+            ReferenceHeader(title: "Documents", subtitle: "Manage your documents and verification", backAction: { store.goBack(fallback: .profile) })
             ForEach(requiredDocuments, id: \.self) { name in
                 DocumentUploadRow(title: name, status: status(for: name)) {
                     importingDocumentType = name
@@ -282,7 +282,7 @@ struct MyServicesScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "My Services", subtitle: "Manage services and areas", backAction: { store.screen = .profile })
+            ReferenceHeader(title: "My Services", subtitle: "Manage services and areas", backAction: { store.goBack(fallback: .profile) })
             HStack(spacing: 16) {
                 SoftIcon(systemImage: "briefcase.fill", color: AppTheme.hotPink, bg: AppTheme.roseSoft, size: 74, iconSize: 32)
                 VStack(alignment: .leading, spacing: 8) {
@@ -351,7 +351,7 @@ struct PartnerSettingsScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Settings", subtitle: "Manage your notification and route preferences", backAction: { store.screen = .profile })
+            ReferenceHeader(title: "Settings", subtitle: "Manage your notification and route preferences", backAction: { store.goBack(fallback: .profile) })
             VStack(spacing: 0) {
                 SettingPreferenceRow(icon: "bell", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Notifications", subtitle: "Manage your notification and route preferences", chip: "Enabled")
                 Divider().padding(.leading, 76)
@@ -390,7 +390,7 @@ struct PartnerLegalScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Legal & Information", subtitle: "Privacy, terms and account deletion", backAction: { store.screen = .profile })
+            ReferenceHeader(title: "Legal & Information", subtitle: "Privacy, terms and account deletion", backAction: { store.goBack(fallback: .profile) })
             LegalCard(title: "Privacy Policy", detail: "ApnaServo stores only partner profile, service area, verification, booking and payment records required to operate the platform.")
             LegalCard(title: "Partner Terms", detail: "Accept only genuine jobs, keep customer communication inside ApnaServo, and update every service status honestly.")
             LegalCard(title: "Account Deletion", detail: "Deletion requests are sent to backend for review. Legal, statement and compliance records may be retained as required.")
@@ -403,7 +403,7 @@ struct PartnerSupportChatScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Support", subtitle: "We're here to help you 24/7", backAction: { store.screen = .profile })
+            ReferenceHeader(title: "Support", subtitle: "We're here to help you 24/7", backAction: { store.goBack(fallback: .profile) })
             VStack(alignment: .leading, spacing: 0) {
                 Text("How can we help you today?")
                     .font(.system(size: 22, weight: .semibold))
@@ -467,7 +467,7 @@ struct PartnerNotificationsScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Messages", subtitle: "All your notifications and messages", backAction: { store.screen = .dashboard }, trailingSystemImage: "checkmark.circle") {
+            ReferenceHeader(title: "Messages", subtitle: "All your notifications and messages", backAction: { store.goBack(fallback: .dashboard) }, trailingSystemImage: "checkmark.circle") {
                 store.markAllNotificationsRead()
             }
             if store.notifications.isEmpty && store.pendingBookings.isEmpty {
@@ -493,12 +493,12 @@ struct IncomingRequestScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "New Request", subtitle: "Available booking", backAction: { store.screen = .dashboard })
+            ReferenceHeader(title: "New Request", subtitle: "Available booking", backAction: { store.goBack(fallback: .dashboard) })
             if let booking = store.selectedBooking {
                 PremiumBookingCard(booking: booking) {
                     store.callCustomer(booking)
                 } detailsAction: {
-                    store.screen = .detail
+                    store.navigate(to: .detail)
                 }
                 VStack(spacing: 12) {
                     Button(store.loading ? "Accepting..." : "Accept Booking") { store.acceptSelectedBooking() }
@@ -519,8 +519,8 @@ struct OrderDetailScreen: View {
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Booking Details", subtitle: store.selectedBooking?.displayId ?? "", backAction: { store.screen = .bookings }, trailingSystemImage: "headphones") {
-                store.screen = .support
+            ReferenceHeader(title: "Booking Details", subtitle: store.selectedBooking?.displayId ?? "", backAction: { store.goBack(fallback: .bookings) }, trailingSystemImage: "headphones") {
+                store.navigate(to: .support)
             }
             if let booking = store.selectedBooking {
                 PremiumBookingCard(booking: booking) {
@@ -550,7 +550,7 @@ struct PartnerMapScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar(title: "Live Route", subtitle: store.selectedBooking?.address ?? "", backAction: { store.screen = .detail })
+            TopBar(title: "Live Route", subtitle: store.selectedBooking?.address ?? "", backAction: { store.goBack(fallback: .detail) })
             if let booking = store.selectedBooking {
                 Map(coordinateRegion: $region, annotationItems: [booking]) { item in
                     MapMarker(coordinate: CLLocationCoordinate2D(latitude: item.lat, longitude: item.lng), tint: .red)
@@ -560,7 +560,7 @@ struct PartnerMapScreen: View {
                 }
                 VStack(spacing: 10) {
                     Button("Navigate") { store.openAppleMaps(booking) }.greenButton()
-                    Button("Back to Booking") { store.screen = .detail }.outlineButton()
+                    Button("Back to Booking") { store.goBack(fallback: .detail) }.outlineButton()
                 }
                 .padding(18)
                 .background(Color.white)

@@ -4,7 +4,7 @@ import UIKit
 
 @MainActor
 final class PartnerAppStore: ObservableObject {
-    @Published var screen: PartnerScreen = .login
+    @Published private(set) var screen: PartnerScreen = .login
     @Published var profile = PartnerProfile()
     @Published var authToken = ""
     @Published var fcmToken = ""
@@ -43,6 +43,7 @@ final class PartnerAppStore: ObservableObject {
     private var realtimeFailureCount = 0
     private var phoneVerificationID = ""
     private var fcmTokenObserver: NSObjectProtocol?
+    private var navigationStack: [PartnerScreen] = []
 
     init() {
         loadLocalState()
@@ -83,11 +84,42 @@ final class PartnerAppStore: ObservableObject {
             .reduce(0) { $0 + $1.amount }
     }
 
+    func navigate(to next: PartnerScreen, resetStack: Bool = false) {
+        if resetStack {
+            navigationStack.removeAll()
+        }
+        guard next != screen else { return }
+        if !resetStack, screen != .login {
+            navigationStack.append(screen)
+        }
+        screen = next
+    }
+
+    func replaceCurrentScreen(with next: PartnerScreen) {
+        guard next != screen else { return }
+        screen = next
+    }
+
+    func goBack(fallback: PartnerScreen = .dashboard) {
+        while let previous = navigationStack.popLast() {
+            if previous != screen {
+                screen = previous
+                return
+            }
+        }
+        resetNavigation(to: fallback)
+    }
+
+    func resetNavigation(to next: PartnerScreen) {
+        navigationStack.removeAll()
+        screen = next
+    }
+
     func loadLocalState() {
         if let data = defaults.data(forKey: profileKey),
            let saved = try? JSONDecoder().decode(PartnerProfile.self, from: data) {
             profile = saved
-            screen = .login
+            resetNavigation(to: .login)
         }
         if let data = defaults.data(forKey: bookingsKey),
            let saved = try? JSONDecoder().decode([PartnerBooking].self, from: data) {
@@ -206,7 +238,7 @@ final class PartnerAppStore: ObservableObject {
         seedPreviewBookings()
         realtimeConnected = true
         lastRealtimeSyncAt = Date()
-        screen = .dashboard
+        resetNavigation(to: .dashboard)
         infoMessage = "Preview mode: Firebase/backend skipped for UI check."
     }
 
@@ -284,7 +316,7 @@ final class PartnerAppStore: ObservableObject {
             guard !previewMode else { return }
             authToken = ""
             secureStore.set("", for: tokenKey)
-            screen = .login
+            resetNavigation(to: .login)
         }
     }
 
@@ -325,7 +357,7 @@ final class PartnerAppStore: ObservableObject {
         authToken = token
         secureStore.set(token, for: tokenKey)
         persistProfile()
-        screen = .dashboard
+        resetNavigation(to: .dashboard)
         if requestNotifications {
             _ = await notificationService.requestPermission()
         }
@@ -357,7 +389,7 @@ final class PartnerAppStore: ObservableObject {
         defaults.removeObject(forKey: profileKey)
         defaults.removeObject(forKey: bookingsKey)
         defaults.removeObject(forKey: "partner_fcm_token")
-        screen = .login
+        resetNavigation(to: .login)
     }
 
     func syncPartnerProfile() async {
@@ -487,7 +519,7 @@ final class PartnerAppStore: ObservableObject {
 
     func openBooking(_ booking: PartnerBooking) {
         selectedBooking = booking
-        screen = booking.isPending ? .request : .detail
+        navigate(to: booking.isPending ? .request : .detail)
     }
 
     func acceptSelectedBooking() {
@@ -497,7 +529,7 @@ final class PartnerAppStore: ObservableObject {
             accepted.status = "accepted"
             upsertBooking(accepted)
             selectedBooking = accepted
-            screen = .detail
+            replaceCurrentScreen(with: .detail)
             infoMessage = "Preview booking accepted."
             return
         }
@@ -508,7 +540,7 @@ final class PartnerAppStore: ObservableObject {
                 let accepted = try await api.acceptBooking(booking.id, token: token)
                 upsertBooking(accepted)
                 selectedBooking = accepted
-                screen = .detail
+                replaceCurrentScreen(with: .detail)
                 infoMessage = "Booking accepted."
             } catch {
                 errorMessage = error.localizedDescription
@@ -524,7 +556,7 @@ final class PartnerAppStore: ObservableObject {
             rejected.status = "rejected"
             upsertBooking(rejected)
             selectedBooking = nil
-            screen = .dashboard
+            goBack(fallback: .dashboard)
             infoMessage = "Preview booking rejected."
             return
         }
@@ -537,7 +569,7 @@ final class PartnerAppStore: ObservableObject {
                 rejected.status = "rejected"
                 upsertBooking(rejected)
                 selectedBooking = nil
-                screen = .dashboard
+                goBack(fallback: .dashboard)
                 infoMessage = "Booking rejected."
             } catch {
                 errorMessage = error.localizedDescription
@@ -553,7 +585,7 @@ final class PartnerAppStore: ObservableObject {
             if status == "completed" {
                 booking.finalAmount = booking.amount == 0 ? 599 : booking.amount
                 booking.completedAtMillis = Int64(Date().timeIntervalSince1970 * 1000)
-                screen = .bookings
+                resetNavigation(to: .bookings)
             }
             upsertBooking(booking)
             selectedBooking = booking
@@ -569,7 +601,7 @@ final class PartnerAppStore: ObservableObject {
                 upsertBooking(updated)
                 selectedBooking = booking
                 if status == "completed" {
-                    screen = .bookings
+                    resetNavigation(to: .bookings)
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -598,7 +630,7 @@ final class PartnerAppStore: ObservableObject {
 
     func openMap(_ booking: PartnerBooking) {
         selectedBooking = booking
-        screen = .map
+        navigate(to: .map)
     }
 
     func openAppleMaps(_ booking: PartnerBooking) {
@@ -621,7 +653,7 @@ final class PartnerAppStore: ObservableObject {
 
     func openBookingChat(_ booking: PartnerBooking) {
         selectedBooking = booking
-        screen = .bookingChat
+        navigate(to: .bookingChat)
         Task { await loadBookingChat() }
     }
 
@@ -675,7 +707,7 @@ final class PartnerAppStore: ObservableObject {
         if !draft.isEmpty {
             supportMessages.append(ChatMessage(id: UUID().uuidString, bookingId: "support", bookingCode: "", senderRole: "partner", senderName: "You", message: draft, clientMessageId: "", deliveryStatus: "draft", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000)))
         }
-        screen = .support
+        navigate(to: .support)
     }
 
     func sendSupportMessage(_ text: String) {
