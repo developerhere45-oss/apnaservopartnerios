@@ -378,7 +378,7 @@ struct PartnerSettingsScreen: View {
             .androidCard(cornerRadius: 24, padding: 20)
             Button("Save Changes") {
                 Task {
-                    _ = await AppNotificationService().requestPermission()
+                    _ = await AppNotificationService.shared.requestPermission()
                     await store.sendLocationHeartbeat()
                 }
             }
