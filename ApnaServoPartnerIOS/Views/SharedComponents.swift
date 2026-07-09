@@ -45,7 +45,7 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color(hex: 0xF6DDE3), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.10), radius: 13, x: 0, y: 7)
+            .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
 
     func cardStyle(padding: CGFloat = 16) -> some View {
@@ -54,11 +54,11 @@ extension View {
 
     func primaryButton() -> some View {
         self
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .background(
                 LinearGradient(colors: [AppTheme.rose, AppTheme.roseDark], startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -68,11 +68,11 @@ extension View {
 
     func greenButton() -> some View {
         self
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .background(
                 LinearGradient(colors: [Color(hex: 0x0DB85B), Color(hex: 0x009A4B)], startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -81,24 +81,52 @@ extension View {
 
     func darkButton() -> some View {
         self
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     func outlineButton() -> some View {
         self
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(AppTheme.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .frame(maxWidth: .infinity, minHeight: 46)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(AppTheme.line, lineWidth: 1)
             )
+    }
+
+    func bookingOutlineButton() -> some View {
+        self
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(AppTheme.hotPink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(hex: 0xF4B9BE), lineWidth: 1.2)
+            )
+    }
+
+    func bookingFilledButton() -> some View {
+        self
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(
+                LinearGradient(colors: [AppTheme.hotPink, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .shadow(color: AppTheme.hotPink.opacity(0.16), radius: 6, x: 0, y: 3)
     }
 
     func safeText() -> some View {
@@ -116,17 +144,20 @@ struct AndroidPage<Content: View>: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 14) {
-                content
+        GeometryReader { proxy in
+            let horizontalPadding: CGFloat = proxy.size.width < 360 ? 12 : 18
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.top, showsTopPadding ? 10 : 0)
+                .padding(.bottom, 20)
             }
-            .frame(maxWidth: .infinity, alignment: .top)
-            .padding(.horizontal, 18)
-            .padding(.top, showsTopPadding ? 12 : 0)
-            .padding(.bottom, 22)
+            .background(AppTheme.bg.ignoresSafeArea())
+            .dynamicTypeSize(.small ... .medium)
         }
-        .background(AppTheme.bg.ignoresSafeArea())
-        .dynamicTypeSize(.small ... .large)
     }
 }
 
@@ -148,7 +179,7 @@ struct TopBar: View {
 
             VStack(spacing: 2) {
                 Text(title)
-                    .font(.system(size: 20, weight: .black))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
@@ -195,7 +226,7 @@ struct AndroidCenteredHeader: View {
 
             VStack(spacing: 2) {
                 Text(title)
-                    .font(.system(size: 20, weight: .black))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(AppTheme.textBlue)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -216,7 +247,7 @@ struct AndroidCenteredHeader: View {
                     .frame(width: 48, height: 50)
                     if badgeCount > 0 {
                         Text("\(min(badgeCount, 99))")
-                            .font(.system(size: 10, weight: .black))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(minWidth: 18, minHeight: 18)
                             .background(AppTheme.rose, in: Capsule())
@@ -260,7 +291,7 @@ struct SectionHeader: View {
     var body: some View {
         HStack(alignment: .center) {
             Text(title)
-                .font(.system(size: 17, weight: .black))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .safeText()
             Spacer()
@@ -281,12 +312,12 @@ struct StatusPill: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .black))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.78)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .background(background, in: Capsule())
     }
 }
@@ -297,7 +328,7 @@ struct ServiceBadge: View {
 
     var body: some View {
         Text(short)
-            .font(.system(size: size > 50 ? 16 : 13, weight: .black))
+            .font(.system(size: size > 50 ? 14 : 12, weight: .semibold))
             .foregroundStyle(accent)
             .frame(width: size, height: size)
             .background(bg, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
@@ -346,7 +377,7 @@ struct PartnerBookingCard: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(booking.serviceName)
-                        .font(.system(size: 15, weight: .black))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppTheme.ink)
                         .lineLimit(2)
                         .safeText()
@@ -370,7 +401,7 @@ struct PartnerBookingCard: View {
                 VStack(alignment: .trailing, spacing: 8) {
                     StatusPill(text: booking.statusLabel, tint: pillTint, background: pillBg)
                     Text(amountText)
-                        .font(.system(size: 16, weight: .black))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(AppTheme.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -421,7 +452,7 @@ struct StatTile: View {
                 .frame(width: 34, height: 34)
                 .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text(value)
-                .font(.system(size: 18, weight: .black))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -445,15 +476,15 @@ struct PartnerBottomNav: View {
             nav("Earnings", "wallet.pass.fill", .earnings)
             nav("Profile", "person.fill", .profile)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(Color(hex: 0xF2D9DE), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.10), radius: 9, x: 0, y: 3)
-        .padding(.horizontal, 14)
+        .shadow(color: Color.black.opacity(0.06), radius: 7, x: 0, y: 2)
+        .padding(.horizontal, 12)
         .padding(.bottom, 6)
     }
 
@@ -463,14 +494,14 @@ struct PartnerBottomNav: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: image)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .medium))
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
             .foregroundStyle(isActive(screen) ? AppTheme.hotPink : Color(hex: 0x858585))
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .frame(maxWidth: .infinity, minHeight: 46)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -506,7 +537,7 @@ struct EmptyState: View {
                 .font(.title2)
                 .foregroundStyle(AppTheme.rose)
             Text(title)
-                .font(.system(size: 16, weight: .black))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .multilineTextAlignment(.center)
                 .safeText()

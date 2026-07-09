@@ -114,7 +114,7 @@ struct PartnerLoginView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .androidCard(cornerRadius: 22, padding: 16)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 16)
                 .padding(.bottom, 14)
             }
         }
@@ -123,12 +123,12 @@ struct PartnerLoginView: View {
     private func authForm(title: String, subtitle: String, buttonTitle: String) -> some View {
         AndroidPage {
             AndroidAssetImage(name: "apna_servo_logo")
-                .frame(width: 180, height: 68)
+                .frame(width: 154, height: 58)
                 .padding(.top, 6)
 
             VStack(spacing: 4) {
                 Text(title)
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                 Text(subtitle)
                     .font(.system(size: 13))
@@ -170,11 +170,11 @@ struct PartnerLoginView: View {
     private var registerScreen: some View {
         AndroidPage {
             AndroidAssetImage(name: "apna_servo_logo")
-                .frame(width: 178, height: 64)
+                .frame(width: 154, height: 56)
 
             VStack(spacing: 4) {
                 Text("Register as a Partner")
-                    .font(.system(size: 25, weight: .black))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .multilineTextAlignment(.center)
                     .safeText()
@@ -187,7 +187,7 @@ struct PartnerLoginView: View {
             VStack(alignment: .leading, spacing: 12) {
                 profilePhotoBlock(compact: false)
                 Text("Personal Information")
-                    .font(.system(size: 16, weight: .black))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                 authInput("Enter your full name", text: $store.profile.name, icon: "person.fill")
                 authInput("Mobile Number", text: $store.profile.phone, icon: "phone.fill", keyboard: .phonePad)
@@ -202,7 +202,7 @@ struct PartnerLoginView: View {
                 authInput("Languages Known", text: $store.profile.languages, icon: "text.bubble.fill")
 
                 Text("Upload Documents")
-                    .font(.system(size: 16, weight: .black))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .padding(.top, 4)
                 Text("At least one document is mandatory.")
@@ -252,7 +252,7 @@ struct PartnerLoginView: View {
                     .padding(compact ? 12 : 18)
                     .clipShape(Circle())
             }
-            .frame(width: compact ? 104 : 126, height: compact ? 104 : 126)
+            .frame(width: compact ? 88 : 104, height: compact ? 88 : 104)
             .overlay(Circle().stroke(AppTheme.line, lineWidth: 1))
 
             Text(compact ? "Your saved profile photo will be used." : "Add a clear profile photo using the camera.")
@@ -273,7 +273,7 @@ struct PartnerLoginView: View {
     private func authInput(_ placeholder: String, text: Binding<String>, icon: String, keyboard: UIKeyboardType = .default) -> some View {
         HStack(spacing: 10) {
             Text(iconText(for: icon))
-                .font(.system(size: 13, weight: .black))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
                 .frame(width: 34, height: 34)
                 .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -296,11 +296,11 @@ struct PartnerLoginView: View {
     private var firebaseAuthPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Firebase Auth")
-                .font(.system(size: 14, weight: .black))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
             HStack(spacing: 10) {
                 Text(store.phoneVerificationSent ? "OTP" : "FIR")
-                    .font(.system(size: 10, weight: .black))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(store.hasBackendSession ? AppTheme.green : AppTheme.hotPink)
                     .frame(width: 34, height: 34)
                     .background(store.hasBackendSession ? AppTheme.greenSoft : AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -364,7 +364,7 @@ struct PartnerLoginView: View {
     private func fakeInput(title: String, icon: String, showsChevron: Bool) -> some View {
         HStack(spacing: 10) {
             Text(icon)
-                .font(.system(size: 13, weight: .black))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
                 .frame(width: 34, height: 34)
                 .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -436,7 +436,7 @@ struct PartnerLoginView: View {
                     StatusPill(text: status, tint: required ? AppTheme.rose : AppTheme.muted, background: required ? AppTheme.roseSoft : Color(hex: 0xF6F6F6))
                 }
                 Text(title)
-                    .font(.system(size: 13, weight: .black))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(3)
                     .safeText()
