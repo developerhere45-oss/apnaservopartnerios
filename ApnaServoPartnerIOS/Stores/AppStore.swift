@@ -281,7 +281,7 @@ final class PartnerAppStore: ObservableObject {
 
     func openAppleMaps(_ booking: PartnerBooking) {
         let url = URL(string: "http://maps.apple.com/?daddr=\(booking.lat),\(booking.lng)&dirflg=d")!
-        UIApplication.shared.open(url)
+        openExternalURL(url)
     }
 
     func callCustomer(_ booking: PartnerBooking) {
@@ -291,7 +291,7 @@ final class PartnerAppStore: ObservableObject {
             return
         }
         Task { await api.createCallLog(bookingId: booking.id, action: "start", reason: "", token: authToken) }
-        UIApplication.shared.open(url)
+        openExternalURL(url)
     }
 
     func openBookingChat(_ booking: PartnerBooking) {
@@ -421,7 +421,7 @@ final class PartnerAppStore: ObservableObject {
                 let data = try await api.downloadStatement(from: statementFrom, to: statementTo, token: authToken)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent("apnaservo-job-statement.pdf")
                 try data.write(to: url)
-                UIApplication.shared.open(url)
+                openExternalURL(url)
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -500,6 +500,10 @@ final class PartnerAppStore: ObservableObject {
             bookings.insert(booking, at: 0)
         }
         if persist { persistBookings() }
+    }
+
+    private func openExternalURL(_ url: URL) {
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
 
 }
