@@ -233,47 +233,51 @@ struct PersonalInfoScreen: View {
 
 struct DocumentsScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
-    @State private var importingDocumentType: String?
 
     var body: some View {
         ReferencePage {
             ReferenceHeader(title: "Documents", subtitle: "Manage your documents and verification", backAction: { store.goBack(fallback: .profile) })
-            ForEach(requiredDocuments, id: \.self) { name in
-                DocumentUploadRow(title: name, status: status(for: name)) {
-                    importingDocumentType = name
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Uploaded Documents")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text("Documents are locked after registration. Contact support if anything needs correction.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppTheme.muted)
+                    .safeText()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+
+            if uploadedDocuments.isEmpty {
+                EmptyState(title: "No uploaded documents", subtitle: "Aadhaar, selfie and certificates uploaded during registration will appear here.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(uploadedDocuments.indices, id: \.self) { index in
+                        let item = uploadedDocuments[index]
+                        VerificationDocumentRow(title: item.title, status: item.status)
+                        if index < uploadedDocuments.count - 1 {
+                            Divider().padding(.leading, 72)
+                        }
+                    }
                 }
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Aadhaar last 4")
-                    .font(.system(size: 18, weight: .semibold))
-                TextField("1234", text: $store.aadhaarLast4)
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(.roundedBorder)
-                Button("Submit Verification") { store.submitVerification() }
-                    .primaryButton()
-            }
-            .androidCard(cornerRadius: 24)
-        }
-        .fileImporter(
-            isPresented: Binding(get: { importingDocumentType != nil }, set: { if !$0 { importingDocumentType = nil } }),
-            allowedContentTypes: [.jpeg, .png, .pdf],
-            allowsMultipleSelection: false
-        ) { result in
-            guard let type = importingDocumentType else { return }
-            importingDocumentType = nil
-            if case .success(let urls) = result, let url = urls.first {
-                store.uploadDocument(documentType: type, fileURL: url)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
             }
         }
     }
 
-    private var requiredDocuments: [String] {
-        ["Aadhaar Card Front", "Aadhaar Card Back", "PAN Card", "Selfie Verification", "Skill Certificate", "Other Supporting Document"]
+    private var uploadedDocuments: [(title: String, status: String)] {
+        documentDisplayOrder.compactMap { type in
+            guard let status = store.documentStatuses[type], status == "Uploaded" else { return nil }
+            return (type, status)
+        }
     }
 
-    private func status(for type: String) -> String {
-        if store.uploadingDocumentType == type { return "Uploading" }
-        return store.documentStatuses[type] ?? "Pending"
+    private var documentDisplayOrder: [String] {
+        ["Aadhaar Card Front", "Aadhaar Card Back", "Selfie Verification", "Skill Certificate"]
     }
 }
 
@@ -283,66 +287,126 @@ struct MyServicesScreen: View {
     var body: some View {
         ReferencePage {
             ReferenceHeader(title: "My Services", subtitle: "Manage services and areas", backAction: { store.goBack(fallback: .profile) })
-            HStack(spacing: 16) {
-                SoftIcon(systemImage: "briefcase.fill", color: AppTheme.hotPink, bg: AppTheme.roseSoft, size: 74, iconSize: 32)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("My Services")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                    Text("Manage your services and get better request matching")
-                        .font(.system(size: 16))
-                        .foregroundStyle(AppTheme.muted)
-                        .safeText()
-                }
-                Spacer()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Service setup")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text("Keep only the work you can accept. Matching uses your live status, radius and service area.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppTheme.muted)
+                    .safeText()
             }
-            .androidCard(cornerRadius: 24, padding: 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+
             VStack(spacing: 0) {
-                ServiceSettingRow(icon: "square.stack.3d.up.fill", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Selected Services", value: store.profile.skillsLabel.isEmpty ? "Not selected" : store.profile.skillsLabel) {
-                    store.infoMessage = "Use registration service chips to edit selected services. Backend sync is enabled."
-                }
-                Divider().padding(.leading, 82)
                 HStack(spacing: 14) {
-                    SoftIcon(systemImage: "wifi", color: AppTheme.green, bg: AppTheme.greenSoft)
+                    Circle()
+                        .fill(store.profile.online ? AppTheme.green : AppTheme.muted)
+                        .frame(width: 14, height: 14)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Online Status").font(.system(size: 17)).foregroundStyle(AppTheme.muted)
                         Text(store.profile.online ? "Online and receiving requests" : "Offline")
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
                             .safeText()
+                        Text(store.profile.online ? "Customers can match with you now" : "Switch on when you are ready")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppTheme.muted)
                     }
                     Spacer()
                     Toggle("", isOn: Binding(get: { store.profile.online }, set: { _ in store.toggleOnline() }))
                         .labelsHidden()
                         .tint(Color(hex: 0x00C853))
                 }
-                .padding(.vertical, 18)
-                Divider().padding(.leading, 82)
+                .padding(.vertical, 16)
+
+                Divider()
+
                 Menu {
                     ForEach([5, 10, 25, 50], id: \.self) { km in
-                        Button("\(km) km") { store.profile.serviceRadiusKm = km; store.persistProfile() }
+                        Button("\(km) km") {
+                            store.profile.serviceRadiusKm = km
+                            store.persistProfile()
+                        }
                     }
                 } label: {
-                    ServiceSettingLabel(icon: "scope", bg: AppTheme.blueSoft, color: Color(hex: 0x4169E1), title: "Service Radius", value: "\(store.profile.serviceRadiusKm) km around \(store.profile.serviceArea)")
+                    ServiceInfoLine(title: "Service Radius", value: "\(store.profile.serviceRadiusKm) km around \(store.profile.serviceArea)", systemImage: "scope")
                 }
-                Divider().padding(.leading, 82)
+                .padding(.vertical, 18)
+
+                Divider()
+
                 Menu {
                     ForEach(["Guwahati", "Dispur", "Ganeshguri", "Zoo Road", "Six Mile"], id: \.self) { area in
-                        Button(area) { store.profile.serviceArea = area; store.persistProfile() }
+                        Button(area) {
+                            store.profile.serviceArea = area
+                            store.profile.workingAreas = area
+                            store.persistProfile()
+                        }
                     }
                 } label: {
-                    ServiceSettingLabel(icon: "mappin.circle", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Service Area", value: "\(store.profile.serviceArea), Assam")
+                    ServiceInfoLine(title: "Primary Area", value: "\(store.profile.serviceArea), Assam", systemImage: "mappin.circle")
+                }
+                .padding(.vertical, 18)
+            }
+            .padding(.horizontal, 18)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Active service categories")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.ink)
+                        Text("Select at least one service")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    Spacer()
+                    Text("\(store.profile.skills.count) active")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppTheme.hotPink)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(AppTheme.roseSoft, in: Capsule())
+                }
+                LazyVGrid(columns: serviceColumns, alignment: .leading, spacing: 8) {
+                    ForEach(PartnerSkill.allCases) { skill in
+                        MyServiceSkillChip(skill: skill, selected: store.profile.skills.contains(skill)) {
+                            store.setSkill(skill, selected: !store.profile.skills.contains(skill))
+                        }
+                    }
                 }
             }
-            .androidCard(cornerRadius: 24, padding: 18)
-            SecurityNoticeCard(title: "Better visibility, more bookings", subtitle: "Keeping your services and area updated helps us match you with the right customer.")
+            .padding(18)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
+
+            HStack(spacing: 12) {
+                Image(systemName: "shield.checkered")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.hotPink)
+                Text("Changes are synced with backend and used for nearby request matching.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppTheme.muted)
+                    .safeText()
+                Spacer()
+            }
+            .padding(16)
+            .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
             Button("Save Changes") {
                 store.persistProfile()
                 Task { await store.syncPartnerProfile() }
             }
             .primaryButton()
         }
+    }
+
+    private var serviceColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 105), spacing: 8)]
     }
 }
 
@@ -1393,23 +1457,92 @@ private struct SecurityNoticeCard: View {
     }
 }
 
-private struct DocumentUploadRow: View {
+private struct VerificationDocumentRow: View {
     let title: String
     let status: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            SoftIcon(systemImage: status == "Uploaded" ? "checkmark.seal" : "doc.text", color: documentTint, bg: documentBackground, size: 48, iconSize: 20)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                Text(status == "Uploaded" ? "Submitted for verification" : "Registration upload status")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Spacer()
+            StatusPill(text: status, tint: documentTint, background: documentBackground)
+        }
+        .padding(.vertical, 12)
+    }
+
+    private var documentTint: Color {
+        status == "Uploaded" ? AppTheme.green : AppTheme.orange
+    }
+
+    private var documentBackground: Color {
+        status == "Uploaded" ? AppTheme.greenSoft : AppTheme.orangeSoft
+    }
+}
+
+private struct ServiceInfoLine: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.muted)
+                Text(value)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(2)
+                    .safeText()
+            }
+            Spacer()
+            Text("Change")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct MyServiceSkillChip: View {
+    let skill: PartnerSkill
+    let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                SoftIcon(systemImage: status == "Uploaded" ? "checkmark.seal" : "doc", color: status == "Uploaded" ? AppTheme.green : AppTheme.hotPink, bg: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.roseSoft)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(AppTheme.ink).lineLimit(1).minimumScaleFactor(0.78)
-                    Text("JPG, PNG or PDF under 5 MB").font(.system(size: 13)).foregroundStyle(AppTheme.muted)
-                }
-                Spacer()
-                StatusPill(text: status, tint: status == "Uploaded" ? AppTheme.green : AppTheme.orange, background: status == "Uploaded" ? AppTheme.greenSoft : AppTheme.orangeSoft)
-            }
-            .androidCard(cornerRadius: 22, padding: 14)
+            Text(skill.label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(selected ? .white : AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .padding(.horizontal, 10)
+                .background(
+                    selected
+                        ? LinearGradient(colors: [AppTheme.hotPink, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [Color.white, Color.white], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: Capsule()
+                )
+                .overlay(Capsule().stroke(selected ? Color.clear : AppTheme.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

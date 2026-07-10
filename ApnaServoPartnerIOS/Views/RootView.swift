@@ -57,14 +57,13 @@ struct PartnerLoginView: View {
                 get: { importingDocumentType != nil },
                 set: { if !$0 { importingDocumentType = nil } }
             ),
-            allowedContentTypes: [.jpeg, .png, .pdf],
+            allowedContentTypes: importerAllowedContentTypes,
             allowsMultipleSelection: false
         ) { result in
             guard let documentType = importingDocumentType else { return }
             importingDocumentType = nil
-            if case .success = result {
-                store.documentStatuses[documentType] = "Selected"
-                store.infoMessage = "\(documentType) selected. Login ke baad Documents screen se upload ho jayega."
+            if case .success(let urls) = result, let url = urls.first {
+                store.queueRegistrationDocument(documentType: documentType, fileURL: url)
             }
         }
     }
@@ -205,7 +204,7 @@ struct PartnerLoginView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .padding(.top, 4)
-                Text("At least one document is mandatory.")
+                Text("Aadhaar front and back are mandatory. Skill certificate is optional.")
                     .font(.system(size: 12))
                     .foregroundStyle(AppTheme.muted)
                 documentSelectionCards
@@ -214,6 +213,10 @@ struct PartnerLoginView: View {
                 firebaseAuthPanel
 
                 Button(store.phoneVerificationSent ? "Verify OTP & Register" : "Register    >") {
+                    guard store.hasRequiredRegistrationDocuments else {
+                        store.errorMessage = "Registration ke liye \(store.missingRegistrationDocuments.joined(separator: ", ")) upload karo."
+                        return
+                    }
                     if store.profile.address.isEmpty {
                         store.profile.address = generatedAddress()
                     }
@@ -248,23 +251,34 @@ struct PartnerLoginView: View {
                     .fill(
                         LinearGradient(colors: [AppTheme.roseSoft, .white], startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
-                AndroidAssetImage(name: "partner_mascot")
-                    .padding(compact ? 12 : 18)
-                    .clipShape(Circle())
+                if compact {
+                    AndroidAssetImage(name: "partner_mascot")
+                        .padding(12)
+                        .clipShape(Circle())
+                } else {
+                    Text(store.profile.name.prefix(1).isEmpty ? "P" : String(store.profile.name.prefix(1)).uppercased())
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(AppTheme.hotPink)
+                }
             }
             .frame(width: compact ? 88 : 104, height: compact ? 88 : 104)
             .overlay(Circle().stroke(AppTheme.line, lineWidth: 1))
 
-            Text(compact ? "Your saved profile photo will be used." : "Add a clear profile photo using the camera.")
+            Text(compact ? "Your saved selfie verification will be used." : "Selfie Verification")
                 .font(.system(size: compact ? 12 : 13, weight: compact ? .bold : .regular))
-                .foregroundStyle(compact ? AppTheme.muted : AppTheme.rose)
+                .foregroundStyle(compact ? AppTheme.muted : AppTheme.ink)
                 .multilineTextAlignment(.center)
 
             if !compact {
-                Button("Retake Photo") {
-                    store.infoMessage = "Camera/photo capture can be wired with UIImagePickerController in Xcode build."
+                StatusPill(text: store.documentStatuses["Selfie Verification"] ?? "Required", tint: selfieStatusTint, background: selfieStatusBackground)
+                Button("Upload Selfie") {
+                    importingDocumentType = "Selfie Verification"
                 }
                 .outlineButton()
+                Text("This replaces the old profile photo step. JPG/PNG only.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.muted)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)
@@ -393,29 +407,41 @@ struct PartnerLoginView: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
                 registrationDocumentCard(
-                    title: "Aadhaar / Passport /\nBirth Certificate",
+                    title: "Aadhaar Front",
                     status: store.documentStatuses["Aadhaar Card Front"] ?? "Required",
                     type: "Aadhaar Card Front",
                     required: true
                 )
                 registrationDocumentCard(
-                    title: "Other Certificate (Optional)",
-                    status: store.documentStatuses["Other Supporting Document"] ?? "Any relevant certificate",
-                    type: "Other Supporting Document",
+                    title: "Aadhaar Back",
+                    status: store.documentStatuses["Aadhaar Card Back"] ?? "Required",
+                    type: "Aadhaar Card Back",
+                    required: true
+                )
+                registrationDocumentCard(
+                    title: "Skill Certificate",
+                    status: store.documentStatuses["Skill Certificate"] ?? "Optional",
+                    type: "Skill Certificate",
                     required: false
                 )
             }
             VStack(spacing: 10) {
                 registrationDocumentCard(
-                    title: "Aadhaar / Passport /\nBirth Certificate",
+                    title: "Aadhaar Front",
                     status: store.documentStatuses["Aadhaar Card Front"] ?? "Required",
                     type: "Aadhaar Card Front",
                     required: true
                 )
                 registrationDocumentCard(
-                    title: "Other Certificate (Optional)",
-                    status: store.documentStatuses["Other Supporting Document"] ?? "Any relevant certificate",
-                    type: "Other Supporting Document",
+                    title: "Aadhaar Back",
+                    status: store.documentStatuses["Aadhaar Card Back"] ?? "Required",
+                    type: "Aadhaar Card Back",
+                    required: true
+                )
+                registrationDocumentCard(
+                    title: "Skill Certificate",
+                    status: store.documentStatuses["Skill Certificate"] ?? "Optional",
+                    type: "Skill Certificate",
                     required: false
                 )
             }
@@ -440,7 +466,7 @@ struct PartnerLoginView: View {
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(3)
                     .safeText()
-                Text("JPG, PNG or PDF (Max 5MB)")
+                Text(type == "Skill Certificate" ? "JPG, PNG or PDF (optional)" : "JPG, PNG or PDF (Max 5MB)")
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.muted)
                     .safeText()
@@ -448,6 +474,18 @@ struct PartnerLoginView: View {
             .androidCard(cornerRadius: 18, padding: 12)
         }
         .buttonStyle(.plain)
+    }
+
+    private var importerAllowedContentTypes: [UTType] {
+        importingDocumentType == "Selfie Verification" ? [.jpeg, .png] : [.jpeg, .png, .pdf]
+    }
+
+    private var selfieStatusTint: Color {
+        store.documentStatuses["Selfie Verification"] == "Uploaded" ? AppTheme.green : AppTheme.rose
+    }
+
+    private var selfieStatusBackground: Color {
+        store.documentStatuses["Selfie Verification"] == "Uploaded" ? AppTheme.greenSoft : AppTheme.roseSoft
     }
 
     private func iconText(for systemName: String) -> String {

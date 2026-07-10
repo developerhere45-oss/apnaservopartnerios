@@ -36,6 +36,7 @@ final class PartnerAppStore: ObservableObject {
     private let defaults = UserDefaults.standard
     private let profileKey = "apnaservo_partner_profile"
     private let bookingsKey = "apnaservo_partner_bookings"
+    private let documentStatusesKey = "apnaservo_partner_document_statuses"
     private let tokenKey = "firebase_id_token"
     private var refreshTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
@@ -44,6 +45,7 @@ final class PartnerAppStore: ObservableObject {
     private var phoneVerificationID = ""
     private var fcmTokenObserver: NSObjectProtocol?
     private var navigationStack: [PartnerScreen] = []
+    private var pendingDocumentUploads: [String: URL] = [:]
 
     init() {
         loadLocalState()
@@ -83,6 +85,12 @@ final class PartnerAppStore: ObservableObject {
             .filter { calendar.isDate(Date(milliseconds: $0.completedAtMillis), equalTo: now, toGranularity: .month) }
             .reduce(0) { $0 + $1.amount }
     }
+    var missingRegistrationDocuments: [String] {
+        ["Aadhaar Card Front", "Aadhaar Card Back", "Selfie Verification"].filter { type in
+            pendingDocumentUploads[type] == nil && documentStatuses[type] != "Uploaded"
+        }
+    }
+    var hasRequiredRegistrationDocuments: Bool { missingRegistrationDocuments.isEmpty }
 
     func navigate(to next: PartnerScreen, resetStack: Bool = false) {
         if resetStack {
@@ -125,6 +133,9 @@ final class PartnerAppStore: ObservableObject {
            let saved = try? JSONDecoder().decode([PartnerBooking].self, from: data) {
             bookings = saved
             notifiedPendingBookingIds = Set(saved.filter(\.isPending).map(\.id))
+        }
+        if let saved = defaults.dictionary(forKey: documentStatusesKey) as? [String: String] {
+            documentStatuses = saved
         }
         fcmToken = defaults.string(forKey: "partner_fcm_token") ?? ""
         supportMessages = [
@@ -303,6 +314,13 @@ final class PartnerAppStore: ObservableObject {
             )
         ]
         notifiedPendingBookingIds = Set(bookings.filter(\.isPending).map(\.id))
+        documentStatuses = [
+            "Aadhaar Card Front": "Uploaded",
+            "Aadhaar Card Back": "Uploaded",
+            "Selfie Verification": "Uploaded",
+            "Skill Certificate": "Uploaded"
+        ]
+        persistDocumentStatuses()
     }
     #endif
 
@@ -365,6 +383,7 @@ final class PartnerAppStore: ObservableObject {
         defaults.set(fcmToken, forKey: "partner_fcm_token")
         await saveFCMTokenIfNeeded()
         await syncPartnerProfile()
+        await uploadPendingRegistrationDocuments()
         await refreshAll()
         startRealtimePolling()
         startLocationHeartbeat()
@@ -388,7 +407,10 @@ final class PartnerAppStore: ObservableObject {
         secureStore.set("", for: tokenKey)
         defaults.removeObject(forKey: profileKey)
         defaults.removeObject(forKey: bookingsKey)
+        defaults.removeObject(forKey: documentStatusesKey)
         defaults.removeObject(forKey: "partner_fcm_token")
+        documentStatuses = [:]
+        pendingDocumentUploads = [:]
         resetNavigation(to: .login)
     }
 
@@ -763,9 +785,24 @@ final class PartnerAppStore: ObservableObject {
         }
     }
 
+    func queueRegistrationDocument(documentType: String, fileURL: URL) {
+        do {
+            let cachedURL = try cacheDocumentForUpload(documentType: documentType, fileURL: fileURL)
+            pendingDocumentUploads[documentType] = cachedURL
+            documentStatuses[documentType] = "Ready"
+            persistDocumentStatuses()
+            infoMessage = "\(documentType) selected. Registration ke baad automatically upload hoga."
+        } catch {
+            documentStatuses[documentType] = "Failed"
+            persistDocumentStatuses()
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func uploadDocument(documentType: String, fileURL: URL) {
         if previewMode {
             documentStatuses[documentType] = "Uploaded"
+            persistDocumentStatuses()
             infoMessage = "\(documentType) marked uploaded in preview."
             return
         }
@@ -788,12 +825,15 @@ final class PartnerAppStore: ObservableObject {
                 }
                 uploadingDocumentType = documentType
                 documentStatuses[documentType] = "Uploading"
+                persistDocumentStatuses()
                 let token = try await usableAuthToken()
                 try await api.uploadDocument(documentType: documentType, fileURL: fileURL, aadhaarLast4: aadhaarLast4, token: token)
                 documentStatuses[documentType] = "Uploaded"
+                persistDocumentStatuses()
                 infoMessage = "\(documentType) uploaded for verification."
             } catch {
                 documentStatuses[documentType] = "Failed"
+                persistDocumentStatuses()
                 errorMessage = error.localizedDescription
             }
             uploadingDocumentType = ""
@@ -929,6 +969,66 @@ final class PartnerAppStore: ObservableObject {
             bookings.insert(booking, at: 0)
         }
         if persist { persistBookings() }
+    }
+
+    private func uploadPendingRegistrationDocuments() async {
+        guard !previewMode, !pendingDocumentUploads.isEmpty else { return }
+        let uploads = pendingDocumentUploads
+        pendingDocumentUploads.removeAll()
+        for (documentType, fileURL) in uploads {
+            do {
+                uploadingDocumentType = documentType
+                documentStatuses[documentType] = "Uploading"
+                persistDocumentStatuses()
+                let token = try await usableAuthToken()
+                try await api.uploadDocument(documentType: documentType, fileURL: fileURL, aadhaarLast4: aadhaarLast4, token: token)
+                documentStatuses[documentType] = "Uploaded"
+                persistDocumentStatuses()
+            } catch {
+                pendingDocumentUploads[documentType] = fileURL
+                documentStatuses[documentType] = "Failed"
+                persistDocumentStatuses()
+                errorMessage = "\(documentType): \(error.localizedDescription)"
+            }
+        }
+        uploadingDocumentType = ""
+        if documentStatuses["Selfie Verification"] == "Uploaded" {
+            do {
+                let token = try await usableAuthToken()
+                try await api.submitVerification(aadhaarLast4: aadhaarLast4, selfieURL: profile.photoURL, faceVerified: false, selfieVerified: false, token: token)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func cacheDocumentForUpload(documentType: String, fileURL: URL) throws -> URL {
+        let scoped = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { fileURL.stopAccessingSecurityScopedResource() }
+        }
+        let allowedExtensions = documentType == "Selfie Verification" ? ["jpg", "jpeg", "png"] : ["jpg", "jpeg", "png", "pdf"]
+        guard allowedExtensions.contains(fileURL.pathExtension.lowercased()) else {
+            throw APIError.badResponse(documentType == "Selfie Verification" ? "Selfie must be JPG or PNG." : "Only JPG, PNG or PDF documents are allowed.")
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        guard size <= AppConfig.maxDocumentBytes else {
+            throw APIError.badResponse("Document must be under 5 MB.")
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("apnaservo-registration-documents", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let safeName = documentType
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+        let destination = directory.appendingPathComponent("\(safeName)-\(UUID().uuidString).\(fileURL.pathExtension.lowercased())")
+        try FileManager.default.copyItem(at: fileURL, to: destination)
+        return destination
+    }
+
+    private func persistDocumentStatuses() {
+        defaults.set(documentStatuses, forKey: documentStatusesKey)
     }
 
     private func openExternalURL(_ url: URL) {
