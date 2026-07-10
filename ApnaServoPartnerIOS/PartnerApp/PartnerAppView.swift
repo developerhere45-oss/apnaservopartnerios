@@ -464,65 +464,461 @@ struct PartnerLegalScreen: View {
 
 struct PartnerSupportChatScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
+    @State private var selectedCategory: PartnerSupportCategory = .booking
+    @State private var selectedPriority: SupportPriority = .high
+    @State private var selectedBookingId = ""
+    @State private var draft = ""
 
     var body: some View {
         ReferencePage {
-            ReferenceHeader(title: "Support", subtitle: "We're here to help you 24/7", backAction: { store.goBack(fallback: .profile) })
-            VStack(alignment: .leading, spacing: 0) {
-                Text("How can we help you today?")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .padding(.bottom, 18)
-                SupportOptionRow(icon: "headphones", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Chat with us", subtitle: "Talk to our support team for any help") {
-                    store.sendSupportMessage("I need help from support.")
-                }
-                Divider().padding(.leading, 110)
-                SupportOptionRow(icon: "doc.badge.arrow.up", bg: AppTheme.orangeSoft, color: AppTheme.orange, title: "Raise a Complaint", subtitle: "Report booking, payment or service issues") {
-                    store.openSupport("Complaint", draft: "I want to raise a complaint about ")
-                }
-                Divider().padding(.leading, 110)
-                SupportOptionRow(icon: "bell.badge", bg: AppTheme.roseSoft, color: AppTheme.hotPink, title: "Cancel Active Booking", subtitle: "Request cancellation with a clear reason") {
-                    store.openSupport("Booking Cancellation", draft: "I need help cancelling my active booking. ")
-                }
-                Divider().padding(.leading, 110)
-                SupportOptionRow(icon: "bell", bg: Color(hex: 0xF3D8FF), color: AppTheme.purple, title: "Track your Issue", subtitle: "Check status of your submitted requests") {
-                    store.infoMessage = "Support ticket tracking will show backend ticket status."
-                }
-                Divider().padding(.leading, 110)
-                SupportOptionRow(icon: "shield.checkered", bg: AppTheme.greenSoft, color: AppTheme.green, title: "Help Center", subtitle: "Find answers to common questions") {
-                    store.infoMessage = "Help center content is loaded from backend knowledge base."
+            ReferenceHeader(title: "Partner Support", subtitle: "Dedicated operations helpdesk", backAction: { store.goBack(fallback: .profile) })
+            SupportHeroCard(openTickets: partnerTicketCount, activeJobs: store.activeBookings.count)
+
+            VStack(alignment: .leading, spacing: 12) {
+                SectionTitleRow(title: "Choose issue type")
+                LazyVGrid(columns: supportColumns, spacing: 10) {
+                    ForEach(PartnerSupportCategory.allCases) { category in
+                        SupportCategoryCard(category: category, selected: selectedCategory == category) {
+                            selectedCategory = category
+                            if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                draft = category.template(booking: selectedBooking)
+                            }
+                        }
+                    }
                 }
             }
-            .androidCard(cornerRadius: 28, padding: 24)
-            HStack(spacing: 18) {
-                SoftIcon(systemImage: "headphones", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("AI Assistant")
-                            .font(.system(size: 22, weight: .semibold))
-                        Text("Beta")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(AppTheme.hotPink)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(AppTheme.roseSoft, in: Capsule())
+            .supportPanel()
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Priority")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                HStack(spacing: 8) {
+                    ForEach(SupportPriority.allCases) { priority in
+                        Button {
+                            selectedPriority = priority
+                        } label: {
+                            Text(priority.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(selectedPriority == priority ? .white : priority.tint)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, minHeight: 36)
+                                .background(selectedPriority == priority ? priority.tint : priority.background, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Text("Get quick answers to common questions with our AI assistant")
-                        .font(.system(size: 15))
+                }
+                Text(selectedPriority.subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.muted)
+                    .safeText()
+            }
+            .supportPanel()
+
+            if !contextBookings.isEmpty {
+                Menu {
+                    Button("No booking context") { selectedBookingId = "" }
+                    ForEach(contextBookings) { booking in
+                        Button("\(booking.displayId) - \(booking.serviceName)") {
+                            selectedBookingId = booking.id
+                            if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                draft = selectedCategory.template(booking: booking)
+                            }
+                        }
+                    }
+                } label: {
+                    SupportContextRow(booking: selectedBooking)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Partner message")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.ink)
+                        Text("Write operational details. Customer-facing wording is not used here.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    Spacer()
+                    Text(selectedCategory.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppTheme.hotPink)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(AppTheme.roseSoft, in: Capsule())
+                }
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $draft)
+                        .font(.system(size: 14))
+                        .frame(minHeight: 118)
+                        .scrollContentBackground(.hidden)
+                        .padding(10)
+                        .background(Color(hex: 0xFFF9FA), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
+                    if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(selectedCategory.template(booking: selectedBooking))
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppTheme.muted)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                            .allowsHitTesting(false)
+                    }
+                }
+                Button("Submit partner support ticket") {
+                    let message = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? selectedCategory.template(booking: selectedBooking) : draft
+                    store.sendSupportMessage(message, category: selectedCategory.title, priority: selectedPriority.apiValue, booking: selectedBooking)
+                    draft = ""
+                }
+                .primaryButton()
+            }
+            .supportPanel()
+
+            VStack(alignment: .leading, spacing: 14) {
+                SectionTitleRow(title: "Ticket timeline", actionTitle: "Refresh") {
+                    store.infoMessage = "Ticket refresh will sync with backend support status endpoint when enabled."
+                }
+                ForEach(store.supportMessages.suffix(6)) { message in
+                    SupportTimelineRow(message: message)
+                }
+            }
+            .supportPanel()
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Partner playbooks")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                SupportPlaybookRow(title: "Booking escalation", detail: "Use when customer is unreachable, address is wrong, or visit timing changes.", icon: "calendar.badge.exclamationmark")
+                SupportPlaybookRow(title: "Payment and payout", detail: "Use for unpaid job, wallet mismatch, commission or settlement queries.", icon: "wallet.pass")
+                SupportPlaybookRow(title: "Verification and documents", detail: "Use for Aadhaar, selfie, skill certificate or profile approval issues.", icon: "checkmark.shield")
+            }
+            .supportPanel()
+        }
+        .onAppear {
+            if draft.isEmpty {
+                draft = selectedCategory.template(booking: selectedBooking)
+            }
+        }
+    }
+
+    private var supportColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 142), spacing: 10)]
+    }
+
+    private var contextBookings: [PartnerBooking] {
+        Array((store.pendingBookings + store.activeBookings).prefix(8))
+    }
+
+    private var selectedBooking: PartnerBooking? {
+        guard !selectedBookingId.isEmpty else { return nil }
+        return store.bookings.first { $0.id == selectedBookingId }
+    }
+
+    private var partnerTicketCount: Int {
+        store.supportMessages.filter { $0.senderRole == "partner" }.count
+    }
+}
+
+private enum PartnerSupportCategory: String, CaseIterable, Identifiable {
+    case booking
+    case payout
+    case verification
+    case customerDispute
+    case appIssue
+    case safety
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .booking: return "Booking Operations"
+        case .payout: return "Payment & Payout"
+        case .verification: return "Verification"
+        case .customerDispute: return "Customer Dispute"
+        case .appIssue: return "App Issue"
+        case .safety: return "Safety"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .booking: return "Job, schedule, location"
+        case .payout: return "Wallet, commission"
+        case .verification: return "Docs, selfie, approval"
+        case .customerDispute: return "Customer behavior"
+        case .appIssue: return "Login, notification, map"
+        case .safety: return "Urgent field support"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .booking: return "calendar.badge.clock"
+        case .payout: return "wallet.pass"
+        case .verification: return "checkmark.shield"
+        case .customerDispute: return "person.2.slash"
+        case .appIssue: return "iphone.gen3"
+        case .safety: return "exclamationmark.shield"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .booking, .verification: return AppTheme.hotPink
+        case .payout: return AppTheme.green
+        case .customerDispute, .safety: return AppTheme.orange
+        case .appIssue: return AppTheme.blue
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .booking, .verification: return AppTheme.roseSoft
+        case .payout: return AppTheme.greenSoft
+        case .customerDispute, .safety: return AppTheme.orangeSoft
+        case .appIssue: return AppTheme.blueSoft
+        }
+    }
+
+    func template(booking: PartnerBooking?) -> String {
+        let bookingLine = booking.map { "Booking: \($0.displayId), \($0.serviceName), status \($0.statusLabel). " } ?? ""
+        switch self {
+        case .booking:
+            return "\(bookingLine)I need partner operations help with schedule, location, customer contact or job status."
+        case .payout:
+            return "\(bookingLine)I need help with payout, wallet balance, commission, incentive or payment confirmation."
+        case .verification:
+            return "I need help with partner verification, Aadhaar, selfie, skill certificate or profile approval."
+        case .customerDispute:
+            return "\(bookingLine)I need help handling a customer dispute or service disagreement."
+        case .appIssue:
+            return "I am facing an app issue with login, notifications, map, booking sync or chat."
+        case .safety:
+            return "\(bookingLine)I need urgent field safety support. Please review immediately."
+        }
+    }
+}
+
+private enum SupportPriority: String, CaseIterable, Identifiable {
+    case normal
+    case high
+    case urgent
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+    var apiValue: String { rawValue }
+
+    var subtitle: String {
+        switch self {
+        case .normal: return "Use for general questions and non-blocking profile queries."
+        case .high: return "Use when a booking, payment, verification, or app workflow is blocked."
+        case .urgent: return "Use only for active job risk, safety, or customer escalation."
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .normal: return AppTheme.blue
+        case .high: return AppTheme.hotPink
+        case .urgent: return AppTheme.orange
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .normal: return AppTheme.blueSoft
+        case .high: return AppTheme.roseSoft
+        case .urgent: return AppTheme.orangeSoft
+        }
+    }
+}
+
+private struct SupportHeroCard: View {
+    let openTickets: Int
+    let activeJobs: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                SoftIcon(systemImage: "headphones", color: AppTheme.hotPink, bg: AppTheme.roseSoft)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Partner Support Desk")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                    Text("Separate queue for partner operations, bookings, payouts and verification.")
+                        .font(.system(size: 14))
                         .foregroundStyle(AppTheme.muted)
                         .safeText()
                 }
                 Spacer()
-                Button("Ask AI") { store.infoMessage = "AI Assistant requires backend AI endpoint before release." }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.hotPink)
-                    .padding(.horizontal, 16)
-                    .frame(height: 46)
-                    .background(Color.white, in: Capsule())
-                    .overlay(Capsule().stroke(AppTheme.hotPink, lineWidth: 1.2))
             }
-            .androidCard(cornerRadius: 24, padding: 20)
+            HStack(spacing: 10) {
+                SupportMetricPill(value: "\(openTickets)", label: "Tickets")
+                SupportMetricPill(value: "\(activeJobs)", label: "Active jobs")
+                SupportMetricPill(value: "24/7", label: "Desk")
+            }
         }
+        .supportPanel()
+    }
+}
+
+private struct SupportMetricPill: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+                .lineLimit(1)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(AppTheme.muted)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 54)
+        .background(AppTheme.bgLight, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+}
+
+private struct SupportCategoryCard: View {
+    let category: PartnerSupportCategory
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: category.icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(selected ? .white : category.tint)
+                        .frame(width: 36, height: 36)
+                        .background(selected ? category.tint : category.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    Spacer()
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(category.tint)
+                    }
+                }
+                Text(category.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(2)
+                    .safeText()
+                Text(category.subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(2)
+                    .safeText()
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(selected ? category.tint.opacity(0.65) : AppTheme.line, lineWidth: selected ? 1.4 : 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SupportContextRow: View {
+    let booking: PartnerBooking?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "link")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(width: 40, height: 40)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Booking context")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.muted)
+                Text(booking.map { "\($0.displayId) - \($0.serviceName)" } ?? "No booking selected")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(2)
+                    .safeText()
+            }
+            Spacer()
+            Image(systemName: "chevron.down")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+        }
+        .supportPanel()
+    }
+}
+
+private struct SupportTimelineRow: View {
+    let message: ChatMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: message.senderRole == "partner" ? "person.crop.circle.fill" : "headphones.circle.fill")
+                .font(.system(size: 24))
+                .foregroundStyle(message.senderRole == "partner" ? AppTheme.hotPink : AppTheme.green)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(message.senderName.isEmpty ? (message.senderRole == "partner" ? "You" : "Support") : message.senderName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                    Spacer()
+                    if !message.deliveryStatus.isEmpty {
+                        Text(message.deliveryStatus.capitalized)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(message.deliveryStatus == "failed" ? AppTheme.orange : AppTheme.green)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(message.deliveryStatus == "failed" ? AppTheme.orangeSoft : AppTheme.greenSoft, in: Capsule())
+                    }
+                }
+                Text(message.message)
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppTheme.ink)
+                    .safeText()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct SupportPlaybookRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppTheme.hotPink)
+                .frame(width: 40, height: 40)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text(detail)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.muted)
+                    .safeText()
+            }
+            Spacer()
+        }
+    }
+}
+
+private extension View {
+    func supportPanel() -> some View {
+        self
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.line, lineWidth: 1))
     }
 }
 
@@ -838,8 +1234,8 @@ private struct StatDivider: View {
 
 private struct SectionTitleRow: View {
     let title: String
-    let actionTitle: String
-    let action: () -> Void
+    var actionTitle: String?
+    var action: (() -> Void)?
 
     var body: some View {
         HStack {
@@ -849,9 +1245,11 @@ private struct SectionTitleRow: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
             Spacer()
-            Button(actionTitle, action: action)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(AppTheme.hotPink)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.hotPink)
+            }
         }
         .padding(.horizontal, 4)
     }

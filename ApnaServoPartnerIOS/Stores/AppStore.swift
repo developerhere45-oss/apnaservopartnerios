@@ -139,7 +139,7 @@ final class PartnerAppStore: ObservableObject {
         }
         fcmToken = defaults.string(forKey: "partner_fcm_token") ?? ""
         supportMessages = [
-            ChatMessage(id: "support-welcome", bookingId: "support", bookingCode: "", senderRole: "support", senderName: "Partner Support", message: "Welcome to partner support. How can we help?", clientMessageId: "", deliveryStatus: "sent", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000))
+            ChatMessage(id: "support-welcome", bookingId: "support", bookingCode: "", senderRole: "support", senderName: "Partner Support Desk", message: "Welcome. Select a partner support category, add booking context if needed, and submit. We route booking, payout, verification and technical issues to separate queues.", clientMessageId: "", deliveryStatus: "sent", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000))
         ]
         if loggedIn {
             startRealtimePolling()
@@ -732,26 +732,41 @@ final class PartnerAppStore: ObservableObject {
         navigate(to: .support)
     }
 
-    func sendSupportMessage(_ text: String) {
+    func sendSupportMessage(_ text: String, category: String? = nil, priority: String = "high", booking: PartnerBooking? = nil) {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         let clientMessageId = "IOSSUPPORT\(Int(Date().timeIntervalSince1970 * 1000))"
+        let selectedCategory = category ?? supportType
+        supportType = selectedCategory
+        let supportPayload = makeSupportPayload(message: clean, category: selectedCategory, priority: priority, booking: booking)
         let local = ChatMessage(id: clientMessageId, bookingId: "support", bookingCode: "", senderRole: "partner", senderName: "You", message: clean, clientMessageId: clientMessageId, deliveryStatus: "queued", createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000))
         supportMessages.append(local)
         if previewMode {
             if let index = supportMessages.firstIndex(where: { $0.id == clientMessageId }) {
                 supportMessages[index].deliveryStatus = "sent"
             }
+            appendSupportAcknowledgement(category: selectedCategory, priority: priority)
             infoMessage = "Preview support request saved."
             return
         }
         Task {
             do {
                 let token = try await usableAuthToken()
-                try await api.createPartnerSupportTicket(category: supportType, message: clean, clientMessageId: clientMessageId, attachmentURL: "", token: token)
+                try await api.createPartnerSupportTicket(
+                    category: selectedCategory,
+                    message: supportPayload,
+                    clientMessageId: clientMessageId,
+                    attachmentURL: "",
+                    priority: priority,
+                    roleContext: "partner",
+                    bookingId: booking?.id ?? "",
+                    metadata: supportMetadata(booking: booking),
+                    token: token
+                )
                 if let index = supportMessages.firstIndex(where: { $0.id == clientMessageId }) {
                     supportMessages[index].deliveryStatus = "sent"
                 }
+                appendSupportAcknowledgement(category: selectedCategory, priority: priority)
                 infoMessage = "Support request submitted."
             } catch {
                 if let index = supportMessages.firstIndex(where: { $0.id == clientMessageId }) {
@@ -760,6 +775,59 @@ final class PartnerAppStore: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func makeSupportPayload(message: String, category: String, priority: String, booking: PartnerBooking?) -> String {
+        var lines = [
+            "Role: Partner",
+            "Category: \(category)",
+            "Priority: \(priority)",
+            "Partner name: \(profile.name.isEmpty ? "Partner" : profile.name)",
+            "Partner phone: \(profile.phone)",
+            "Service area: \(profile.serviceArea), \(profile.state)",
+            "Online: \(profile.online ? "yes" : "no")"
+        ]
+        if let booking {
+            lines.append("Booking ID: \(booking.displayId)")
+            lines.append("Booking status: \(booking.statusLabel)")
+            lines.append("Service: \(booking.serviceName)")
+            lines.append("Customer city: \(booking.city)")
+        }
+        lines.append("Message: \(message)")
+        return lines.joined(separator: "\n")
+    }
+
+    private func supportMetadata(booking: PartnerBooking?) -> [String: String] {
+        var metadata: [String: String] = [
+            "app": "ios-partner",
+            "role": "partner",
+            "partnerPhone": profile.phone,
+            "serviceArea": profile.serviceArea,
+            "city": profile.city,
+            "online": profile.online ? "true" : "false"
+        ]
+        if let booking {
+            metadata["bookingCode"] = booking.displayId
+            metadata["bookingStatus"] = booking.status
+            metadata["serviceName"] = booking.serviceName
+        }
+        return metadata
+    }
+
+    private func appendSupportAcknowledgement(category: String, priority: String) {
+        supportMessages.append(
+            ChatMessage(
+                id: "ack-\(UUID().uuidString)",
+                bookingId: "support",
+                bookingCode: "",
+                senderRole: "support",
+                senderName: "Partner Support Desk",
+                message: "\(category) ticket received with \(priority) priority. A support agent will review the partner context and respond from the correct queue.",
+                clientMessageId: "",
+                deliveryStatus: "sent",
+                createdAtMillis: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+        )
     }
 
     func submitVerification() {

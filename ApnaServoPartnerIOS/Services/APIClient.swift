@@ -201,13 +201,26 @@ final class APIClient {
         let _: EmptyResponse = try await request(path: "/partners/verification", method: "POST", token: token, body: body)
     }
 
-    func createPartnerSupportTicket(category: String, message: String, clientMessageId: String, attachmentURL: String, token: String) async throws {
+    func createPartnerSupportTicket(
+        category: String,
+        message: String,
+        clientMessageId: String,
+        attachmentURL: String,
+        priority: String = "high",
+        roleContext: String = "partner",
+        bookingId: String = "",
+        metadata: [String: String] = [:],
+        token: String
+    ) async throws {
         let body: [String: Any] = [
             "category": category,
             "message": message,
             "clientMessageId": clientMessageId,
             "attachmentUrl": attachmentURL,
-            "priority": "high"
+            "priority": priority,
+            "roleContext": roleContext,
+            "bookingId": bookingId,
+            "metadata": metadata
         ]
         let _: EmptyResponse = try await request(path: "/partners/support-tickets", method: "POST", token: token, body: body)
     }
