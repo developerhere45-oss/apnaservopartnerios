@@ -44,8 +44,10 @@ final class PartnerAppStore: ObservableObject {
     private var realtimeFailureCount = 0
     private var phoneVerificationID = ""
     private var fcmTokenObserver: NSObjectProtocol?
+    private var notificationOpenObserver: NSObjectProtocol?
     private var navigationStack: [PartnerScreen] = []
     private var pendingDocumentUploads: [String: URL] = [:]
+    private var pendingNotificationDeepLink: AppNotificationDeepLink?
 
     init() {
         loadLocalState()
@@ -58,11 +60,26 @@ final class PartnerAppStore: ObservableObject {
                 await self?.saveFCMTokenIfNeeded()
             }
         }
+        notificationOpenObserver = NotificationCenter.default.addObserver(forName: .apnaServoNotificationOpened, object: nil, queue: .main) { [weak self] notification in
+            guard let deepLink = notification.object as? AppNotificationDeepLink else { return }
+            Task { @MainActor in
+                _ = self?.notificationService.consumePendingDeepLink()
+                await self?.openNotificationDeepLink(deepLink)
+            }
+        }
+        if let deepLink = notificationService.consumePendingDeepLink() {
+            Task { @MainActor in
+                await self.openNotificationDeepLink(deepLink)
+            }
+        }
     }
 
     deinit {
         if let fcmTokenObserver {
             NotificationCenter.default.removeObserver(fcmTokenObserver)
+        }
+        if let notificationOpenObserver {
+            NotificationCenter.default.removeObserver(notificationOpenObserver)
         }
     }
 
@@ -385,6 +402,7 @@ final class PartnerAppStore: ObservableObject {
         await syncPartnerProfile()
         await uploadPendingRegistrationDocuments()
         await refreshAll()
+        await openPendingNotificationDeepLinkIfNeeded()
         startRealtimePolling()
         startLocationHeartbeat()
     }
@@ -526,6 +544,7 @@ final class PartnerAppStore: ObservableObject {
                 notifications[index].isRead = true
             }
         }
+        routeNotificationItem(item)
     }
 
     func markAllNotificationsRead() {
@@ -536,6 +555,79 @@ final class PartnerAppStore: ObservableObject {
                 notifications[index].isRead = true
             }
             infoMessage = "Messages marked as read."
+        }
+    }
+
+    func openNotification(_ item: PartnerNotificationItem) {
+        markNotificationRead(item)
+    }
+
+    private func routeNotificationItem(_ item: PartnerNotificationItem) {
+        let actionType: String
+        if item.type.lowercased().contains("chat") {
+            actionType = "OPEN_BOOKING_CHAT"
+        } else if item.type.lowercased().contains("support") {
+            actionType = "OPEN_SUPPORT"
+        } else {
+            actionType = "OPEN_PARTNER_BOOKING"
+        }
+        let deepLink = AppNotificationDeepLink(
+            actionType: actionType,
+            type: item.type,
+            bookingId: item.bookingId,
+            bookingCode: item.bookingCode,
+            targetApp: "PARTNER"
+        )
+        Task { await openNotificationDeepLink(deepLink) }
+    }
+
+    func openNotificationDeepLink(_ deepLink: AppNotificationDeepLink) async {
+        guard deepLink.targetApp.isEmpty || deepLink.targetApp == "PARTNER" else { return }
+        guard loggedIn else {
+            pendingNotificationDeepLink = deepLink
+            return
+        }
+
+        if deepLink.actionType == "OPEN_SUPPORT" || deepLink.type.contains("support") {
+            resetNavigation(to: .support)
+            return
+        }
+        if deepLink.actionType == "OPEN_PARTNER_HOME" || deepLink.actionType == "OPEN_HOME" {
+            resetNavigation(to: .dashboard)
+            return
+        }
+
+        var booking = bookingMatching(deepLink)
+        if booking == nil, !previewMode {
+            _ = await fetchBookings(surfaceErrors: false)
+            booking = bookingMatching(deepLink)
+        }
+
+        guard let booking else {
+            resetNavigation(to: .bookings)
+            infoMessage = "Booking update received. Open the matching booking from the list."
+            return
+        }
+
+        selectedBooking = booking
+        if deepLink.isChat {
+            resetNavigation(to: .bookingChat)
+            await loadBookingChat()
+        } else {
+            resetNavigation(to: booking.isPending ? .request : .detail)
+        }
+    }
+
+    private func openPendingNotificationDeepLinkIfNeeded() async {
+        guard let deepLink = pendingNotificationDeepLink else { return }
+        pendingNotificationDeepLink = nil
+        await openNotificationDeepLink(deepLink)
+    }
+
+    private func bookingMatching(_ deepLink: AppNotificationDeepLink) -> PartnerBooking? {
+        bookings.first { booking in
+            (!deepLink.bookingId.isEmpty && booking.id == deepLink.bookingId)
+                || (!deepLink.bookingCode.isEmpty && booking.bookingCode == deepLink.bookingCode)
         }
     }
 

@@ -417,11 +417,51 @@ final class SecureStore {
 
 extension Notification.Name {
     static let apnaServoFCMTokenUpdated = Notification.Name("apnaServoFCMTokenUpdated")
+    static let apnaServoNotificationOpened = Notification.Name("apnaServoNotificationOpened")
+}
+
+struct AppNotificationDeepLink: Equatable {
+    let actionType: String
+    let type: String
+    let bookingId: String
+    let bookingCode: String
+    let targetApp: String
+
+    init(actionType: String, type: String, bookingId: String, bookingCode: String, targetApp: String) {
+        self.actionType = actionType.uppercased()
+        self.type = type.lowercased()
+        self.bookingId = bookingId
+        self.bookingCode = bookingCode
+        self.targetApp = targetApp.uppercased()
+    }
+
+    init(userInfo: [AnyHashable: Any]) {
+        func value(_ key: String) -> String {
+            if let text = userInfo[key] as? String { return text }
+            if let number = userInfo[key] as? NSNumber { return number.stringValue }
+            if let nested = userInfo["data"] as? [String: Any] {
+                if let text = nested[key] as? String { return text }
+                if let number = nested[key] as? NSNumber { return number.stringValue }
+            }
+            return ""
+        }
+
+        actionType = value("actionType").uppercased()
+        type = value("type").lowercased()
+        bookingId = value("bookingId")
+        bookingCode = value("bookingCode")
+        targetApp = value("targetApp").uppercased()
+    }
+
+    var isChat: Bool {
+        actionType == "OPEN_BOOKING_CHAT" || type.contains("chat")
+    }
 }
 
 final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = AppNotificationService()
     private(set) var fcmToken = ""
+    private var pendingDeepLink: AppNotificationDeepLink?
 
     private override init() {
         super.init()
@@ -481,6 +521,11 @@ final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
         NotificationCenter.default.post(name: .apnaServoFCMTokenUpdated, object: token)
     }
 
+    func consumePendingDeepLink() -> AppNotificationDeepLink? {
+        defer { pendingDeepLink = nil }
+        return pendingDeepLink
+    }
+
     func showBookingRequestNotification(_ booking: PartnerBooking) {
         let content = UNMutableNotificationContent()
         content.title = "New \(booking.serviceName) booking"
@@ -494,6 +539,17 @@ final class AppNotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound, .badge]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let deepLink = AppNotificationDeepLink(userInfo: response.notification.request.content.userInfo)
+        pendingDeepLink = deepLink
+        NotificationCenter.default.post(name: .apnaServoNotificationOpened, object: deepLink)
+        completionHandler()
     }
 }
 
