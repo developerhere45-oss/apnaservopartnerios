@@ -111,9 +111,11 @@ struct PartnerBooking: Identifiable, Codable, Hashable {
 
     var displayId: String { bookingCode.isEmpty ? id : bookingCode }
     var amount: Int { finalAmount > 0 ? finalAmount : defaultAmount }
-    var isPending: Bool { status == "pending" }
+    var isPending: Bool { ["pending", "sent_to_partner"].contains(status) }
     var isActive: Bool { ["accepted", "on_the_way", "arrived", "started", "amount_pending"].contains(status) }
     var isFinished: Bool { ["completed", "cancelled", "rejected"].contains(status) }
+    var isWaitingForCustomerPayment: Bool { status == "amount_pending" && quoteStatus != "payment_submitted" }
+    var isPaymentSubmittedByCustomer: Bool { status == "amount_pending" && quoteStatus == "payment_submitted" }
 
     var statusLabel: String {
         switch status {
@@ -121,8 +123,8 @@ struct PartnerBooking: Identifiable, Codable, Hashable {
         case "accepted": return "Accepted"
         case "on_the_way": return "On The Way"
         case "arrived": return "Arrived"
-        case "started": return "Started"
-        case "amount_pending": return "Amount Pending"
+        case "started": return "Work in Progress"
+        case "amount_pending": return isPaymentSubmittedByCustomer ? "Payment Submitted" : "Waiting for Payment"
         case "completed": return "Completed"
         case "cancelled": return "Cancelled"
         case "rejected": return "Rejected"
@@ -164,10 +166,10 @@ struct PartnerBooking: Identifiable, Codable, Hashable {
         self.slot = slot
         self.defaultAmount = defaultAmount
         self.finalAmount = finalAmount
-        self.status = status
+        self.status = Self.normalizedStatus(status)
         self.lat = lat
         self.lng = lng
-        self.quoteStatus = quoteStatus
+        self.quoteStatus = Self.normalizedQuoteStatus(quoteStatus, bookingStatus: self.status)
         self.quoteCounterAmount = quoteCounterAmount
         self.quoteCounterMessage = quoteCounterMessage
         self.createdAtMillis = createdAtMillis
@@ -188,14 +190,37 @@ struct PartnerBooking: Identifiable, Codable, Hashable {
         slot = c.string("slot", "time", fallback: "Slot pending")
         defaultAmount = c.int("defaultAmount", "price")
         finalAmount = c.int("finalAmount")
-        status = c.string("status", fallback: "pending")
+        status = Self.normalizedStatus(c.string("status", fallback: "pending"))
         lat = c.double("lat", fallback: AppConfig.defaultLatitude)
         lng = c.double("lng", fallback: AppConfig.defaultLongitude)
-        quoteStatus = c.string("quoteStatus", fallback: "none")
+        quoteStatus = Self.normalizedQuoteStatus(c.string("quoteStatus", fallback: "none"), bookingStatus: status)
         quoteCounterAmount = c.int("quoteCounterAmount")
         quoteCounterMessage = c.string("quoteCounterMessage")
         createdAtMillis = c.int64("createdAtMillis", "createdAt", fallback: Int64(Date().timeIntervalSince1970 * 1000))
         completedAtMillis = c.int64("completedAtMillis", "completedAt")
+    }
+
+    private static func normalizedStatus(_ value: String) -> String {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "searching", "sent_to_partner", "requested": return "pending"
+        case "assigned", "partner_assigned": return "accepted"
+        case "travelling", "partner_on_way": return "on_the_way"
+        case "reached", "partner_arrived": return "arrived"
+        case "in_progress", "work_started", "service_started": return "started"
+        case "work_completed", "payment_pending", "quoted", "negotiating": return "amount_pending"
+        case "paid", "payment_verified", "service_completed": return "completed"
+        default:
+            let clean = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return clean.isEmpty ? "pending" : clean
+        }
+    }
+
+    private static func normalizedQuoteStatus(_ value: String, bookingStatus: String) -> String {
+        let clean = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if clean.isEmpty || clean == "none" {
+            return bookingStatus == "amount_pending" ? "pending" : "none"
+        }
+        return clean
     }
 }
 

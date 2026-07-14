@@ -980,7 +980,7 @@ struct OrderDetailScreen: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 BookingDetailCloneHeader(
                     backAction: { store.goBack(fallback: .bookings) },
                     supportAction: { store.navigate(to: .support) }
@@ -993,14 +993,16 @@ struct OrderDetailScreen: View {
                         callAction: { store.callCustomer(booking) },
                         startAction: { store.openMap(booking) }
                     )
-                    BookingDetailCloneAcceptedBanner()
+                    if booking.status == "accepted" {
+                        BookingDetailCloneAcceptedBanner()
+                    }
                 } else {
                     EmptyState(title: "No job selected", subtitle: "Open a booking from dashboard.")
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 18)
         }
         .background(AppTheme.bg.ignoresSafeArea())
     }
@@ -1014,30 +1016,34 @@ private struct BookingDetailCloneHeader: View {
         HStack(alignment: .center, spacing: 8) {
             Button(action: backAction) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
-                    .frame(width: 52, height: 52)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                    .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: 0xEDE3E5), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
             Spacer(minLength: 4)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 2) {
                 Text("Booking Details")
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                HStack(spacing: 16) {
+                Text("Customer and service overview")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
                     Capsule()
                         .fill(AppTheme.rose)
-                        .frame(width: 48, height: 6)
+                        .frame(width: 30, height: 3)
                     Circle()
                         .fill(AppTheme.rose)
-                        .frame(width: 7, height: 7)
+                        .frame(width: 4, height: 4)
                 }
+                .padding(.top, 3)
             }
             .layoutPriority(1)
 
@@ -1046,18 +1052,18 @@ private struct BookingDetailCloneHeader: View {
             Button(action: supportAction) {
                 HStack(spacing: 6) {
                     Image(systemName: "headphones")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                     Text("Support")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 108, height: 52)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+                .frame(width: 88, height: 44)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: 0xF2DCE2), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
-        .frame(height: 88)
+        .frame(minHeight: 64)
     }
 }
 
@@ -1080,94 +1086,97 @@ private struct BookingDetailCloneCard: View {
             BookingDetailCloneDivider()
             dateTimeRow
                 .padding(.vertical, 18)
-            startButton
-        }
-        .padding(18)
-        .background(
-            ZStack(alignment: .topTrailing) {
-                Color.white
-                Circle()
-                    .fill(AppTheme.roseSoft.opacity(0.7))
-                    .frame(width: 190, height: 190)
-                    .offset(x: 76, y: 12)
-                    .blur(radius: 1)
+            if booking.status == "accepted" {
+                startButton
             }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .padding(14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color(hex: 0xF1E5E7), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.09), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
     }
 
     private var customerBlock: some View {
-        HStack(alignment: .center, spacing: 14) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                customerIdentity
+                Spacer(minLength: 4)
+                contactActions
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                customerIdentity
+                contactActions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var customerIdentity: some View {
+        HStack(alignment: .center, spacing: 12) {
             Text(bookingInitials)
-                .font(.system(size: 36, weight: .black))
+                .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 76, height: 76)
+                .frame(width: 58, height: 58)
                 .background(
                     Circle()
                         .fill(Color(hex: 0xFFE7EE))
-                        .overlay(Circle().stroke(Color.white, lineWidth: 3))
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(customerName)
-                    .font(.system(size: 26, weight: .black))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
                 Text(shortPhone)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                 Text(maskedPhone)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Image(systemName: "shield")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x14AEB8))
                     Text("Protected calling")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AppTheme.rose)
                         .lineLimit(1)
                 }
                 Text("Only you can call this customer")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(AppTheme.muted)
                     .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
-            HStack(spacing: 8) {
-                Button(action: chatAction) {
-                    Label("Chat", systemImage: "message")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppTheme.rose)
-                        .frame(width: 74, height: 50)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(AppTheme.rose, lineWidth: 1.2))
-                }
-                .buttonStyle(.plain)
-
-                Button(action: callAction) {
-                    Label("Call", systemImage: "phone.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 78, height: 50)
-                        .background(
-                            LinearGradient(colors: [AppTheme.rose, Color(hex: 0xDE235A)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        )
-                        .shadow(color: AppTheme.rose.opacity(0.28), radius: 10, x: 0, y: 5)
-                }
-                .buttonStyle(.plain)
+    private var contactActions: some View {
+        HStack(spacing: 8) {
+            Button(action: chatAction) {
+                Label("Chat", systemImage: "message")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppTheme.rose)
+                    .frame(width: 68, height: 40)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(AppTheme.rose, lineWidth: 1))
             }
+            .buttonStyle(.plain)
+
+            Button(action: callAction) {
+                Label("Call", systemImage: "phone.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 68, height: 40)
+                    .background(AppTheme.rose, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1176,7 +1185,7 @@ private struct BookingDetailCloneCard: View {
             BookingDetailCloneDateCell(icon: "calendar", title: "Booking Date", value: bookingDateTitle, subvalue: bookingDayTitle)
             Rectangle()
                 .fill(Color(hex: 0xEADFE2))
-                .frame(width: 1, height: 70)
+                .frame(width: 1, height: 52)
             BookingDetailCloneDateCell(icon: "clock", title: "Time", value: bookingTimeTitle, subvalue: bookingDurationTitle)
         }
     }
@@ -1185,33 +1194,33 @@ private struct BookingDetailCloneCard: View {
         Button(action: startAction) {
             HStack(spacing: 16) {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 58, height: 58)
+                    .frame(width: 42, height: 42)
                     .background(Circle().fill(Color.white.opacity(0.16)))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Start Service")
-                        .font(.system(size: 25, weight: .black))
+                        .font(.system(size: 16, weight: .bold))
                     Text("Navigate to customer location")
-                        .font(.system(size: 17, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(.white)
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 24, weight: .black))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .padding(.horizontal, 18)
-            .frame(height: 76)
+            .padding(.horizontal, 12)
+            .frame(height: 58)
             .background(
                 LinearGradient(colors: [Color(hex: 0x0DB85B), Color(hex: 0x008A36)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
             )
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0x008B38), lineWidth: 1))
-            .shadow(color: Color(hex: 0x008A36).opacity(0.26), radius: 12, x: 0, y: 7)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0x008B38), lineWidth: 1))
+            .shadow(color: Color(hex: 0x008A36).opacity(0.2), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -1329,27 +1338,25 @@ private struct BookingDetailCloneInfoRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 60, height: 60)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: 0xF7D9E1), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 5)
+                .frame(width: 42, height: 42)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(AppTheme.muted)
                 Text(value.isEmpty ? "-" : value)
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 10)
     }
 }
 
@@ -1360,25 +1367,24 @@ private struct BookingDetailCloneDateCell: View {
     let subvalue: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 9) {
             Image(systemName: icon)
-                .font(.system(size: 26, weight: .bold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 58, height: 58)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(hex: 0xF7D9E1), lineWidth: 1))
+                .frame(width: 38, height: 38)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15))
+                    .font(.system(size: 10))
                     .foregroundStyle(AppTheme.muted)
                 Text(value)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(3)
                     .minimumScaleFactor(0.78)
                 Text(subvalue)
-                    .font(.system(size: 14))
+                    .font(.system(size: 10))
                     .foregroundStyle(AppTheme.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1397,67 +1403,167 @@ private struct BookingDetailCloneDivider: View {
 
 private struct BookingDetailCloneAcceptedBanner: View {
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Image(systemName: "checkmark")
-                .font(.system(size: 18, weight: .black))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color(hex: 0x008D3E))
-                .frame(width: 34, height: 34)
+                .frame(width: 30, height: 30)
                 .overlay(Circle().stroke(Color(hex: 0x008D3E), lineWidth: 2))
 
             Text("Booking accepted")
-                .font(.system(size: 18, weight: .black))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(Color(hex: 0x008D3E))
             Text("\u{2022}")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AppTheme.ink)
             Text("Let's go!")
-                .font(.system(size: 18, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(AppTheme.muted)
             Spacer()
         }
-        .padding(.horizontal, 18)
-        .frame(height: 58)
-        .background(Color(hex: 0xF4FFF9), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(hex: 0xCFEEDD), lineWidth: 1))
+        .padding(.horizontal, 14)
+        .frame(height: 50)
+        .background(Color(hex: 0xF4FFF9), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: 0xCFEEDD), lineWidth: 1))
     }
 }
 
 struct PartnerMapScreen: View {
     @EnvironmentObject private var store: PartnerAppStore
+    @State private var showsFinalAmount = false
+    @State private var finalAmount = ""
+    @State private var previousStatus = ""
+    @State private var statusNotice = ""
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            VStack(spacing: 12) {
                 ServiceStatusCloneHeader(
                     backAction: { store.goBack(fallback: .detail) },
                     supportAction: { store.navigate(to: .support) }
                 )
 
-            if let booking = store.selectedBooking {
-                    ServiceStatusCloneCustomerCard(
-                        booking: booking,
-                        chatAction: { store.openBookingChat(booking) },
-                        callAction: { store.callCustomer(booking) }
-                    )
-                    ServiceStatusCloneServiceProblemRow(booking: booking)
-                    ServiceStatusCloneTimeline(booking: booking)
-                    ServiceStatusCloneLocationRow(booking: booking) {
-                        store.openAppleMaps(booking)
+                if let booking = store.selectedBooking {
+                    VStack(spacing: 12) {
+                        ServiceStatusCloneCustomerCard(
+                            booking: booking,
+                            chatAction: { store.openBookingChat(booking) },
+                            callAction: { store.callCustomer(booking) }
+                        )
+                        ServiceStatusCloneServiceProblemRow(booking: booking)
                     }
-                    if let next = ServiceStatusCloneStep.next(for: booking.status) {
-                        ServiceStatusCloneActionPanel(step: next, loading: store.loading) {
-                            store.updateSelectedStatus(next.status)
+                    .padding(14)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0xF1E0E5), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
+
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Tracking Progress")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(AppTheme.ink)
+                            Spacer()
+                            Label("Live", systemImage: "circle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(AppTheme.green)
+                        }
+                        ServiceStatusCloneTimeline(booking: booking)
+                        Divider()
+                        ServiceStatusCloneLocationRow(booking: booking) {
+                            store.openAppleMaps(booking)
                         }
                     }
-            } else {
-                EmptyState(title: "No map target", subtitle: "Open a booking first.")
+                    .padding(14)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0xEDE5E7), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.045), radius: 7, y: 3)
+                } else {
+                    EmptyState(title: "No service selected", subtitle: "Open an active booking to update its status.")
+                }
             }
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 18)
         }
         .background(AppTheme.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let booking = store.selectedBooking, booking.isActive {
+                serviceActionDock(for: booking)
+            }
+        }
+        .sheet(isPresented: $showsFinalAmount) {
+            if let booking = store.selectedBooking {
+                ServiceFinalAmountSheet(
+                    booking: booking,
+                    amount: $finalAmount,
+                    submitting: store.loading
+                ) { amount in
+                    store.updateSelectedStatus("amount_pending", finalAmount: amount)
+                    showsFinalAmount = false
+                }
+                .presentationDetents([.height(360)])
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if !statusNotice.isEmpty {
+                Label(statusNotice, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .frame(height: 46)
+                    .background(Color(hex: 0x163D2A), in: Capsule())
+                    .padding(.bottom, 132)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onAppear {
+            previousStatus = store.selectedBooking?.status ?? ""
+        }
+        .onChange(of: store.selectedBooking?.status) { status in
+            let newStatus = status ?? ""
+            guard !newStatus.isEmpty, !previousStatus.isEmpty, newStatus != previousStatus else {
+                previousStatus = newStatus
+                return
+            }
+            previousStatus = newStatus
+            withAnimation(.easeOut(duration: 0.2)) {
+                statusNotice = newStatus == "completed" ? "Payment verified. Booking completed." : "Customer notified successfully."
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 2_200_000_000)
+                withAnimation(.easeIn(duration: 0.2)) { statusNotice = "" }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func serviceActionDock(for booking: PartnerBooking) -> some View {
+        if let next = ServiceStatusCloneStep.next(for: booking) {
+            ServiceStatusCloneActionPanel(step: next, loading: store.loading) {
+                if next.requiresAmount {
+                    finalAmount = suggestedAmount(for: booking)
+                    showsFinalAmount = true
+                } else {
+                    store.updateSelectedStatus(next.status)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(.ultraThinMaterial)
+        } else if booking.status == "amount_pending" {
+            ServicePaymentWaitingDock(booking: booking)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+                .background(.ultraThinMaterial)
+        }
+    }
+
+    private func suggestedAmount(for booking: PartnerBooking) -> String {
+        if booking.quoteCounterAmount > 0 { return String(booking.quoteCounterAmount) }
+        if booking.amount > 0 { return String(booking.amount) }
+        return ""
     }
 }
 
@@ -1469,30 +1575,30 @@ private struct ServiceStatusCloneHeader: View {
         HStack(alignment: .center, spacing: 8) {
             Button(action: backAction) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .black))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(AppTheme.rose)
-                    .frame(width: 54, height: 54)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: 0xF2DCE2), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
             Spacer(minLength: 4)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 2) {
                 Text("Service Status")
-                    .font(.system(size: 27, weight: .black))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
                 Text("Live updates about your service")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(AppTheme.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                HStack(spacing: 12) {
-                    Capsule().fill(AppTheme.rose).frame(width: 48, height: 6)
-                    Capsule().fill(AppTheme.rose).frame(width: 12, height: 6)
+                HStack(spacing: 6) {
+                    Capsule().fill(AppTheme.rose).frame(width: 30, height: 3)
+                    Circle().fill(AppTheme.rose).frame(width: 4, height: 4)
                 }
                 .padding(.top, 2)
             }
@@ -1503,18 +1609,18 @@ private struct ServiceStatusCloneHeader: View {
             Button(action: supportAction) {
                 HStack(spacing: 7) {
                     Image(systemName: "headphones")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                     Text("Support")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 110, height: 52)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+                .frame(width: 88, height: 44)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: 0xF2DCE2), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
-        .frame(minHeight: 104)
+        .frame(minHeight: 64)
     }
 }
 
@@ -1528,11 +1634,10 @@ private struct ServiceStatusCloneCustomerCard: View {
             horizontalLayout
             verticalLayout
         }
-        .padding(.top, 12)
     }
 
     private var horizontalLayout: some View {
-        HStack(alignment: .center, spacing: 18) {
+        HStack(alignment: .center, spacing: 12) {
             avatar
             customerCopy
             Spacer(minLength: 8)
@@ -1541,8 +1646,8 @@ private struct ServiceStatusCloneCustomerCard: View {
     }
 
     private var verticalLayout: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
                 avatar
                 customerCopy
             }
@@ -1554,38 +1659,38 @@ private struct ServiceStatusCloneCustomerCard: View {
     private var avatar: some View {
         ZStack(alignment: .bottomTrailing) {
             Text(initials)
-                .font(.system(size: 35, weight: .black))
+                .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 94, height: 94)
+                .frame(width: 64, height: 64)
                 .background(
                     Circle()
                         .fill(LinearGradient(colors: [AppTheme.roseDark, AppTheme.rose], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .overlay(Circle().stroke(AppTheme.roseSoft, lineWidth: 8))
+                        .overlay(Circle().stroke(AppTheme.roseSoft, lineWidth: 5))
                 )
             Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
+                .frame(width: 24, height: 24)
                 .background(AppTheme.rose, in: Circle())
                 .overlay(Circle().stroke(Color.white, lineWidth: 3))
         }
     }
 
     private var customerCopy: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(name)
-                .font(.system(size: 25, weight: .black))
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             Label("Protected calling only", systemImage: "shield.fill")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppTheme.rose)
             Label(maskedPhone, systemImage: "phone.fill")
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
             Label(addressText, systemImage: "mappin")
-                .font(.system(size: 14, weight: .regular))
+                .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1596,22 +1701,22 @@ private struct ServiceStatusCloneCustomerCard: View {
         HStack(spacing: 10) {
             Button(action: chatAction) {
                 Label("Chat", systemImage: "message")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppTheme.rose)
-                    .frame(width: 78, height: 50)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.rose, lineWidth: 1.3))
+                    .frame(width: 68, height: 40)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(AppTheme.rose, lineWidth: 1))
             }
             .buttonStyle(.plain)
 
             Button(action: callAction) {
                 Label("Call", systemImage: "phone.fill")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 78, height: 50)
+                    .frame(width: 68, height: 40)
                     .background(
                         LinearGradient(colors: [AppTheme.rose, Color(hex: 0xC9004D)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                     )
                     .shadow(color: AppTheme.rose.opacity(0.25), radius: 10, x: 0, y: 5)
             }
@@ -1643,17 +1748,21 @@ private struct ServiceStatusCloneServiceProblemRow: View {
     let booking: PartnerBooking
 
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 12) {
             Rectangle()
                 .fill(Color(hex: 0xF4CBD4))
                 .frame(height: 1)
 
-            HStack(spacing: 18) {
-                ServiceStatusCloneMiniInfo(icon: "wrench.fill", title: "Service", value: booking.serviceName)
-                Rectangle()
-                    .fill(Color(hex: 0xF4CBD4))
-                    .frame(width: 1, height: 72)
-                ServiceStatusCloneMiniInfo(icon: "doc.text.fill", title: "Problem", value: booking.issue.isEmpty ? "Customer requested \(booking.serviceName)" : booking.issue)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    ServiceStatusCloneMiniInfo(icon: "wrench.fill", title: "Service", value: booking.serviceName)
+                    Rectangle().fill(Color(hex: 0xF4CBD4)).frame(width: 1, height: 52)
+                    ServiceStatusCloneMiniInfo(icon: "doc.text.fill", title: "Problem", value: booking.issue.isEmpty ? "Customer requested \(booking.serviceName)" : booking.issue)
+                }
+                VStack(spacing: 10) {
+                    ServiceStatusCloneMiniInfo(icon: "wrench.fill", title: "Service", value: booking.serviceName)
+                    ServiceStatusCloneMiniInfo(icon: "doc.text.fill", title: "Problem", value: booking.issue.isEmpty ? "Customer requested \(booking.serviceName)" : booking.issue)
+                }
             }
         }
     }
@@ -1665,18 +1774,18 @@ private struct ServiceStatusCloneMiniInfo: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 58, height: 58)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            VStack(alignment: .leading, spacing: 5) {
+                .frame(width: 40, height: 40)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15))
+                    .font(.system(size: 11))
                     .foregroundStyle(AppTheme.muted)
                 Text(value)
-                    .font(.system(size: 17, weight: .black))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1713,52 +1822,53 @@ private struct ServiceStatusCloneTimelineRow: View {
 
     private var completed: Bool { currentRank > stage.rank || currentRank >= 6 || stage.rank == 1 }
     private var current: Bool { currentRank == stage.rank && currentRank < 6 && stage.rank > 1 }
-    private var circleColor: Color { completed ? AppTheme.green : current ? AppTheme.rose : Color(hex: 0xF1F1F1) }
-    private var lineColor: Color { completed ? AppTheme.green.opacity(0.45) : current ? AppTheme.rose.opacity(0.65) : Color(hex: 0xE5E5E5) }
-    private var textColor: Color { current ? AppTheme.rose : completed ? AppTheme.ink : AppTheme.muted }
+    private var circleColor: Color { completed ? AppTheme.green : current ? stage.color : Color(hex: 0xF1F1F1) }
+    private var lineColor: Color { completed ? AppTheme.green.opacity(0.45) : current ? stage.color.opacity(0.65) : Color(hex: 0xE5E5E5) }
+    private var textColor: Color { current ? stage.color : completed ? AppTheme.ink : AppTheme.muted }
     private var statusText: String { completed ? "Completed" : current ? "In Progress" : "Pending" }
-    private var statusColor: Color { completed ? AppTheme.green : current ? AppTheme.rose : AppTheme.muted }
-    private var statusBg: Color { completed ? AppTheme.greenSoft : current ? AppTheme.roseSoft : Color(hex: 0xF5F5F5) }
+    private var statusColor: Color { completed ? AppTheme.green : current ? stage.color : AppTheme.muted }
+    private var statusBg: Color { completed ? AppTheme.greenSoft : current ? stage.color.opacity(0.12) : Color(hex: 0xF5F5F5) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 11) {
             ZStack(alignment: .top) {
                 if hasNext {
                     Rectangle()
                         .fill(lineColor)
-                        .frame(width: 3, height: 78)
-                        .offset(y: 42)
+                        .frame(width: 2, height: 52)
+                        .offset(y: 32)
                 }
                 ZStack {
                     Circle()
                         .fill(circleColor)
-                        .frame(width: 54, height: 54)
+                        .frame(width: 40, height: 40)
                     Image(systemName: completed ? "checkmark" : stage.icon)
-                        .font(.system(size: 20, weight: .black))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(completed || current ? .white : AppTheme.muted)
                 }
             }
-            .frame(width: 58, height: hasNext ? 98 : 62)
+            .frame(width: 44, height: hasNext ? 68 : 44)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(stage.title)
-                    .font(.system(size: 18, weight: .black))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(textColor)
-                Text(stage.rank == 1 ? acceptedTime : current ? acceptedTime : "Pending")
-                    .font(.system(size: 15))
+                Text(stage.rank == 1 ? acceptedTime : stage.subtitle)
+                    .font(.system(size: 11))
                     .foregroundStyle(current || completed ? AppTheme.ink : AppTheme.muted)
+                    .lineLimit(1)
             }
-            .padding(.top, 7)
+            .padding(.top, 3)
 
             Spacer()
 
             Text(statusText)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(statusColor)
-                .padding(.horizontal, 14)
-                .frame(height: 32)
-                .background(statusBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.top, 8)
+                .padding(.horizontal, 9)
+                .frame(height: 25)
+                .background(statusBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.top, 4)
         }
     }
 }
@@ -1768,33 +1878,33 @@ private struct ServiceStatusCloneLocationRow: View {
     let navigateAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Image(systemName: "mappin")
-                .font(.system(size: 26, weight: .bold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppTheme.rose)
-                .frame(width: 58, height: 58)
-                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
+                .frame(width: 42, height: 42)
+                .background(AppTheme.roseSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
                 Text("Customer Location")
-                    .font(.system(size: 17, weight: .black))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
                 Text(booking.address.isEmpty ? booking.city : booking.address)
-                    .font(.system(size: 14))
+                    .font(.system(size: 11))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(3)
             }
             Spacer()
             Button(action: navigateAction) {
                 Label("Navigate", systemImage: "paperplane.fill")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppTheme.rose)
-                    .frame(width: 118, height: 50)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.rose.opacity(0.45), lineWidth: 1.2))
+                    .frame(width: 94, height: 40)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(AppTheme.rose.opacity(0.45), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 }
 
@@ -1804,51 +1914,160 @@ private struct ServiceStatusCloneActionPanel: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            Rectangle()
-                .fill(Color(hex: 0xF4CBD4))
-                .frame(height: 1)
-
+        VStack(spacing: 10) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Update Status")
-                        .font(.system(size: 19, weight: .black))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(AppTheme.ink)
                     Text(step.hint)
-                        .font(.system(size: 14))
+                        .font(.system(size: 11))
                         .foregroundStyle(AppTheme.muted)
+                        .lineLimit(2)
                 }
                 Spacer()
                 HStack(spacing: 8) {
-                    Circle().fill(Color(hex: 0x008D3E)).frame(width: 9, height: 9)
+                    Circle().fill(Color(hex: 0x008D3E)).frame(width: 7, height: 7)
                     Text("Live")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x008D3E))
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 34)
+                .padding(.horizontal, 11)
+                .frame(height: 28)
                 .background(AppTheme.greenSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
             Button(action: action) {
                 HStack(spacing: 12) {
                     Image(systemName: step.icon)
-                        .font(.system(size: 20, weight: .black))
+                        .font(.system(size: 18, weight: .bold))
                     Text(loading ? "Updating..." : step.label)
-                        .font(.system(size: 18, weight: .black))
+                        .font(.system(size: 16, weight: .bold))
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 18, weight: .black))
+                        .font(.system(size: 16, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 62)
-                .background(step.gradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .shadow(color: step.color.opacity(0.28), radius: 14, x: 0, y: 8)
+                .frame(height: 56)
+                .background(step.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: step.color.opacity(0.22), radius: 9, x: 0, y: 5)
             }
             .disabled(loading)
             .buttonStyle(.plain)
         }
-        .padding(.top, 6)
+        .padding(12)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: 0xF1E5E7), lineWidth: 1))
+    }
+}
+
+private struct ServicePaymentWaitingDock: View {
+    let booking: PartnerBooking
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(AppTheme.orange)
+                .frame(width: 42, height: 42)
+                .background(AppTheme.orangeSoft, in: RoundedRectangle(cornerRadius: 13))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Waiting for Customer Payment")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppTheme.ink)
+                Text("Final amount Rs \(booking.amount). Confirm only after payment is submitted.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color(hex: 0xF1E5E7), lineWidth: 1))
+    }
+}
+
+private struct ServiceFinalAmountSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let booking: PartnerBooking
+    @Binding var amount: String
+    let submitting: Bool
+    let submit: (Int) -> Void
+    @State private var validationMessage = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(booking.quoteCounterAmount > 0 ? "Send Revised Quote" : "Complete Service")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                    Text("Enter the final amount after completing the work.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppTheme.muted)
+                }
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(width: 36, height: 36)
+                        .background(AppTheme.bg, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if booking.quoteCounterAmount > 0 {
+                Label("Customer counter offer: Rs \(booking.quoteCounterAmount)", systemImage: "arrow.left.arrow.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.orange)
+            }
+
+            HStack(spacing: 10) {
+                Text("Rs")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(AppTheme.rose)
+                TextField("Final amount", text: $amount)
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 17, weight: .semibold))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 54)
+            .background(AppTheme.bg, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(validationMessage.isEmpty ? Color(hex: 0xE8DDE0) : Color.red, lineWidth: 1))
+
+            if !validationMessage.isEmpty {
+                Text(validationMessage)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+
+            Button {
+                guard let value = Int(amount.filter(\.isNumber)), value > 0, value <= 1_000_000 else {
+                    validationMessage = "Enter a valid final amount."
+                    return
+                }
+                validationMessage = ""
+                submit(value)
+            } label: {
+                Text(submitting ? "Submitting..." : "Complete & Send Amount")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(AppTheme.green, in: RoundedRectangle(cornerRadius: 17))
+            }
+            .disabled(submitting)
+            .buttonStyle(.plain)
+
+            Text("The customer will receive this amount for direct payment confirmation.")
+                .font(.system(size: 11))
+                .foregroundStyle(AppTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .center)
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .background(Color.white)
     }
 }
 
@@ -1867,7 +2086,7 @@ private enum ServiceStatusCloneStage: CaseIterable, Identifiable {
         case .onTheWay: return 2
         case .arrived: return 3
         case .started: return 4
-        case .completed: return 5
+        case .completed: return 6
         }
     }
 
@@ -1890,6 +2109,25 @@ private enum ServiceStatusCloneStage: CaseIterable, Identifiable {
         case .completed: return "checkmark"
         }
     }
+
+    var subtitle: String {
+        switch self {
+        case .accepted: return "Booking accepted"
+        case .onTheWay: return "Partner is on the way to customer"
+        case .arrived: return "Partner has arrived at the location"
+        case .started: return "Service work is in progress"
+        case .completed: return "Service and payment are completed"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .accepted, .onTheWay: return AppTheme.rose
+        case .arrived: return AppTheme.blue
+        case .started: return AppTheme.orange
+        case .completed: return AppTheme.green
+        }
+    }
 }
 
 private enum ServiceStatusCloneStep {
@@ -1897,6 +2135,7 @@ private enum ServiceStatusCloneStep {
     case arrived
     case started
     case complete
+    case revisedQuote
     case confirmPayment
 
     var status: String {
@@ -1904,7 +2143,7 @@ private enum ServiceStatusCloneStep {
         case .onTheWay: return "on_the_way"
         case .arrived: return "arrived"
         case .started: return "started"
-        case .complete: return "amount_pending"
+        case .complete, .revisedQuote: return "amount_pending"
         case .confirmPayment: return "completed"
         }
     }
@@ -1915,6 +2154,7 @@ private enum ServiceStatusCloneStep {
         case .arrived: return "Mark as Arrived"
         case .started: return "Start Service"
         case .complete: return "Complete Service"
+        case .revisedQuote: return "Send Revised Quote"
         case .confirmPayment: return "Confirm Payment Received"
         }
     }
@@ -1924,7 +2164,7 @@ private enum ServiceStatusCloneStep {
         case .onTheWay: return "car.fill"
         case .arrived: return "mappin"
         case .started: return "play.fill"
-        case .complete, .confirmPayment: return "checkmark"
+        case .complete, .revisedQuote, .confirmPayment: return "checkmark"
         }
     }
 
@@ -1933,7 +2173,7 @@ private enum ServiceStatusCloneStep {
         case .onTheWay: return AppTheme.rose
         case .arrived: return AppTheme.blue
         case .started: return AppTheme.orange
-        case .complete, .confirmPayment: return AppTheme.green
+        case .complete, .revisedQuote, .confirmPayment: return AppTheme.green
         }
     }
 
@@ -1945,7 +2185,7 @@ private enum ServiceStatusCloneStep {
             return LinearGradient(colors: [AppTheme.blue, Color(hex: 0x1454C9)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .started:
             return LinearGradient(colors: [AppTheme.orange, Color(hex: 0xE0690F)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .complete, .confirmPayment:
+        case .complete, .revisedQuote, .confirmPayment:
             return LinearGradient(colors: [Color(hex: 0x0DB85B), Color(hex: 0x008A36)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
@@ -1954,6 +2194,8 @@ private enum ServiceStatusCloneStep {
         switch self {
         case .complete:
             return "Complete the job and enter the final amount."
+        case .revisedQuote:
+            return "Review the counter offer and send a fresh amount."
         case .confirmPayment:
             return "Confirm only after receiving customer payment."
         default:
@@ -1961,13 +2203,21 @@ private enum ServiceStatusCloneStep {
         }
     }
 
-    static func next(for status: String) -> ServiceStatusCloneStep? {
-        switch status {
+    var requiresAmount: Bool {
+        switch self {
+        case .complete, .revisedQuote: return true
+        default: return false
+        }
+    }
+
+    static func next(for booking: PartnerBooking) -> ServiceStatusCloneStep? {
+        switch booking.status {
         case "accepted", "pending": return .onTheWay
         case "on_the_way": return .arrived
         case "arrived": return .started
         case "started": return .complete
-        case "amount_pending": return .confirmPayment
+        case "amount_pending" where booking.isPaymentSubmittedByCustomer: return .confirmPayment
+        case "amount_pending" where ["countered", "rejected", "expired"].contains(booking.quoteStatus): return .revisedQuote
         default: return nil
         }
     }
@@ -3041,29 +3291,6 @@ private struct NotificationRowView: View {
     }
 }
 
-private struct ServiceTimelineCard: View {
-    let booking: PartnerBooking
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Service Status")
-                .font(.system(size: 20, weight: .semibold))
-            ForEach(StatusStep.timeline, id: \.status) { step in
-                HStack(spacing: 14) {
-                    Image(systemName: booking.statusRank >= step.rank ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(booking.statusRank >= step.rank ? AppTheme.green : AppTheme.muted)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(step.label).font(.system(size: 17, weight: .semibold))
-                        Text(booking.statusRank >= step.rank ? "Completed" : "Pending").font(.system(size: 13)).foregroundStyle(AppTheme.muted)
-                    }
-                    Spacer()
-                }
-            }
-        }
-        .androidCard(cornerRadius: 24)
-    }
-}
-
 private struct SoftIcon: View {
     let systemImage: String
     let color: Color
@@ -3105,71 +3332,6 @@ private enum EarningsPeriod: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
-}
-
-private enum StatusStep {
-    case onTheWay
-    case arrived
-    case started
-    case complete
-    case confirmPayment
-
-    var status: String {
-        switch self {
-        case .onTheWay: return "on_the_way"
-        case .arrived: return "arrived"
-        case .started: return "started"
-        case .complete: return "amount_pending"
-        case .confirmPayment: return "completed"
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .onTheWay: return "Mark as On The Way"
-        case .arrived: return "Mark as Arrived"
-        case .started: return "Start Service"
-        case .complete: return "Complete Service"
-        case .confirmPayment: return "Confirm Payment Received"
-        }
-    }
-
-    var rank: Int {
-        switch self {
-        case .onTheWay: return 2
-        case .arrived: return 3
-        case .started: return 4
-        case .complete: return 5
-        case .confirmPayment: return 6
-        }
-    }
-
-    static var timeline: [StatusStep] { [.onTheWay, .arrived, .started, .complete, .confirmPayment] }
-
-    static func next(for status: String) -> StatusStep? {
-        switch status {
-        case "accepted": return .onTheWay
-        case "on_the_way": return .arrived
-        case "arrived": return .started
-        case "started": return .complete
-        case "amount_pending": return .confirmPayment
-        default: return nil
-        }
-    }
-}
-
-private extension PartnerBooking {
-    var statusRank: Int {
-        switch status {
-        case "accepted": return 1
-        case "on_the_way": return 2
-        case "arrived": return 3
-        case "started": return 4
-        case "amount_pending": return 5
-        case "completed": return 6
-        default: return isPending ? 0 : 1
-        }
-    }
 }
 
 private extension PartnerAppStore {

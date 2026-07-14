@@ -140,6 +140,26 @@ final class PartnerAppStore: ObservableObject {
         screen = next
     }
 
+    private func bookingScreen(for booking: PartnerBooking) -> PartnerScreen {
+        if booking.isPending { return .request }
+        if ["on_the_way", "arrived", "started", "amount_pending"].contains(booking.status) {
+            return .map
+        }
+        return .detail
+    }
+
+    private func nextAllowedStatus(for booking: PartnerBooking) -> String? {
+        switch booking.status {
+        case "accepted": return "on_the_way"
+        case "on_the_way": return "arrived"
+        case "arrived": return "started"
+        case "started": return "amount_pending"
+        case "amount_pending" where booking.isPaymentSubmittedByCustomer: return "completed"
+        case "amount_pending" where ["countered", "rejected", "expired"].contains(booking.quoteStatus): return "amount_pending"
+        default: return nil
+        }
+    }
+
     func loadLocalState() {
         if let data = defaults.data(forKey: profileKey),
            let saved = try? JSONDecoder().decode(PartnerProfile.self, from: data) {
@@ -614,7 +634,7 @@ final class PartnerAppStore: ObservableObject {
             resetNavigation(to: .bookingChat)
             await loadBookingChat()
         } else {
-            resetNavigation(to: booking.isPending ? .request : .detail)
+            resetNavigation(to: bookingScreen(for: booking))
         }
     }
 
@@ -633,7 +653,7 @@ final class PartnerAppStore: ObservableObject {
 
     func openBooking(_ booking: PartnerBooking) {
         selectedBooking = booking
-        navigate(to: booking.isPending ? .request : .detail)
+        navigate(to: bookingScreen(for: booking))
     }
 
     func acceptSelectedBooking() {
@@ -692,12 +712,26 @@ final class PartnerAppStore: ObservableObject {
         }
     }
 
-    func updateSelectedStatus(_ status: String) {
-        guard var booking = selectedBooking else { return }
+    func updateSelectedStatus(_ status: String, finalAmount: Int? = nil) {
+        guard var booking = selectedBooking, !loading else { return }
+        guard nextAllowedStatus(for: booking) == status else {
+            errorMessage = "Booking changed on another device. Refresh and try again."
+            Task { _ = await fetchBookings(surfaceErrors: false) }
+            return
+        }
+        let requestedAmount = status == "amount_pending" ? (finalAmount ?? 0) : booking.finalAmount
+        if status == "amount_pending", requestedAmount <= 0 {
+            errorMessage = "Enter the final service amount before completing the job."
+            return
+        }
         if previewMode {
             booking.status = status
+            if status == "amount_pending" {
+                booking.finalAmount = requestedAmount
+                booking.quoteStatus = "pending"
+            }
             if status == "completed" {
-                booking.finalAmount = booking.amount == 0 ? 599 : booking.amount
+                booking.quoteStatus = "approved"
                 booking.completedAtMillis = Int64(Date().timeIntervalSince1970 * 1000)
                 resetNavigation(to: .bookings)
             }
@@ -710,7 +744,7 @@ final class PartnerAppStore: ObservableObject {
             let location = await makeLocationPayload(bookingId: booking.id)
             do {
                 let token = try await usableAuthToken()
-                let updated = try await api.updateBookingStatus(booking.id, status: status, finalAmount: booking.amount, location: location, token: token)
+                let updated = try await api.updateBookingStatus(booking.id, status: status, finalAmount: requestedAmount, location: location, token: token)
                 booking = updated
                 upsertBooking(updated)
                 selectedBooking = booking
